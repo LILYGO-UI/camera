@@ -1,0 +1,55 @@
+schema_version = 1
+
+[project]
+package = "lilygo-ui-camera"
+version = "0.1.0"
+app_id = "cc.lilygo.ui.Camera"
+title = "相机"
+summary = "为 T-DisplayCM0 打造的拍照与录像应用"
+description = "基于 IMX219 与 libcamera C++ API 的相机应用，提供实时取景、JPEG 拍照、1080p 无声录像和最近拍摄预览。"
+license = "MIT"
+source_repo = "https://github.com/LILYGO-UI/lilygo-ui-camera"
+homepage = "https://github.com/LILYGO-UI/lilygo-ui-camera"
+categories = ["Multimedia"]
+
+[[project.authors]]
+name = "lbuque"
+email = "110239031@qq.com"
+
+[project.assets]
+icon = "assets/app-icon.png"
+
+[[project.assets.screenshots]]
+path = "assets/previews/preview1.png"
+caption = "相机取景界面"
+
+[[project.assets.screenshots]]
+path = "assets/previews/camera-landscape.png"
+caption = "横屏相机界面"
+
+[[project.permissions]]
+id = "camera"
+reason = "使用 IMX219 摄像头取景、拍照和录像"
+
+[[project.permissions]]
+id = "filesystem"
+access = "read-write"
+scope = "shared-data"
+reason = "将照片和视频保存在用户的 Pictures/Camera 目录或指定拍摄目录"
+
+[project.compatibility]
+architectures = ["arm64"]
+min_appkit_version = "0.1.0"
+
+[project.launcher]
+order = 90
+
+[build]
+host_preset = "host-simulator"
+cross_preset = "cm0-cross"
+package_dir = "dist"
+
+[deploy]
+host = "raspberrypi.local"
+user = "pi"
+port = 22

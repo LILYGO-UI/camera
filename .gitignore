@@ -1,0 +1,9 @@
+/.cache/
+/.lpm/
+/.venv/
+/build/
+/dist/
+/publish.json
+.DS_Store
+__pycache__/
+*.pyc

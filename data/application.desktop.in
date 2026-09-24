@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=@LILYGO_UI_APP_NAME_DESKTOP@
+Comment=@LILYGO_UI_APP_SUMMARY_DESKTOP@
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/@LILYGO_UI_EXECUTABLE_NAME@
+Icon=@LILYGO_UI_APP_ID@
+Terminal=false
+Categories=@LILYGO_UI_DESKTOP_CATEGORIES@
+StartupNotify=true
