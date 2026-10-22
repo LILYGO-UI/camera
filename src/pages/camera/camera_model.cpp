@@ -5,7 +5,18 @@ bool CameraModel::select_mode(CameraMode mode)
     if (state_.phase != CameraPhase::Ready || state_.reviewing) return false;
     state_.mode = mode;
     state_.error.clear();
-    state_.status = mode == CameraMode::Photo ? "轻点快门拍照" : "轻点开始录像 · 无声";
+    state_.status = mode == CameraMode::Photo ? "Tap shutter to take a photo" : "Tap to record · No audio";
+    return true;
+}
+
+bool CameraModel::select_profile(CameraProfile profile)
+{
+    if (state_.phase != CameraPhase::Ready || state_.reviewing || !valid_camera_profile(profile) ||
+        state_.profile == profile)
+        return false;
+    state_.phase  = CameraPhase::Reconfiguring;
+    state_.status = "Switching quality…";
+    state_.error.clear();
     return true;
 }
 
@@ -14,18 +25,18 @@ std::string CameraModel::shutter()
     if (state_.reviewing) return {};
     if (state_.phase == CameraPhase::Recording) {
         state_.phase  = CameraPhase::Stopping;
-        state_.status = "正在保存视频…";
+        state_.status = "Saving video…";
         return "stop_recording";
     }
     if (state_.phase != CameraPhase::Ready) return {};
     state_.error.clear();
     if (state_.mode == CameraMode::Photo) {
         state_.phase  = CameraPhase::Capturing;
-        state_.status = "正在保存照片…";
+        state_.status = "Saving photo…";
         return "capture";
     }
     state_.phase  = CameraPhase::StartingRecording;
-    state_.status = "正在开始录像…";
+    state_.status = "Starting recording…";
     return "start_recording";
 }
 
@@ -38,8 +49,9 @@ void CameraModel::apply(const CameraEvent &event, std::uint64_t now_ms)
         state_.phase     = CameraPhase::Ready;
         state_.simulated = event.simulated;
         state_.error.clear();
-        state_.status = "轻点快门拍照";
+        state_.status = state_.mode == CameraMode::Photo ? "Tap shutter to take a photo" : "Tap to record · No audio";
         state_.zoom   = event.zoom;
+        if (event.has_profile && valid_camera_profile(event.profile)) state_.profile = event.profile;
     } else if (event.event == "state") {
         state_.zoom = event.zoom;
         if (event.state == "recording") {
@@ -48,11 +60,19 @@ void CameraModel::apply(const CameraEvent &event, std::uint64_t now_ms)
                 state_.elapsed_seconds      = 0;
             }
             state_.phase  = CameraPhase::Recording;
-            state_.status = "正在录像 · 无声";
+            state_.status = "Recording · No audio";
         } else if (event.state == "ready") {
             state_.phase = CameraPhase::Ready;
-            if (state_.error.empty() && state_.status.find("正在") == 0)
-                state_.status = state_.mode == CameraMode::Photo ? "轻点快门拍照" : "轻点开始录像 · 无声";
+            if (event.has_profile && valid_camera_profile(event.profile)) state_.profile = event.profile;
+            if (state_.error.empty() &&
+                (state_.status == "Connecting to camera…" || state_.status == "Switching quality…" ||
+                 state_.status == "Saving video…" || state_.status == "Saving photo…" ||
+                 state_.status == "Starting recording…" || state_.status == "Recording · No audio"))
+                state_.status =
+                    state_.mode == CameraMode::Photo ? "Tap shutter to take a photo" : "Tap to record · No audio";
+        } else if (event.state == "reconfiguring") {
+            state_.phase  = CameraPhase::Reconfiguring;
+            state_.status = "Switching quality…";
         } else if (event.state == "capturing") {
             state_.phase = CameraPhase::Capturing;
         } else if (event.state == "stopping") {
@@ -63,12 +83,12 @@ void CameraModel::apply(const CameraEvent &event, std::uint64_t now_ms)
         state_.last_kind  = event.kind;
         ++state_.saved_count;
         if (state_.phase != CameraPhase::Error) {
-            state_.status = event.kind == "video" ? "视频已保存" : "照片已保存";
+            state_.status = event.kind == "video" ? "Video saved" : "Photo saved";
             state_.error.clear();
         }
     } else if (event.event == "error") {
         state_.error  = event.message;
-        state_.status = event.fatal ? "相机连接失败" : "操作未完成";
+        state_.status = event.fatal ? "Camera connection failed" : "Operation failed";
         if (event.fatal) {
             state_.phase     = CameraPhase::Error;
             state_.reviewing = false;
@@ -104,7 +124,7 @@ void CameraModel::retry()
     if (state_.phase != CameraPhase::Error) return;
     state_.phase = CameraPhase::Starting;
     state_.error.clear();
-    state_.status    = "正在连接相机…";
+    state_.status    = "Connecting to camera…";
     state_.reviewing = false;
     state_.zoom      = 1.0;
 }

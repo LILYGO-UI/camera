@@ -10,6 +10,41 @@
 #include <unistd.h>
 
 namespace {
+void test_capture_profile_selection()
+{
+    CameraViewModel vm(false);
+    assert(vm.state().profile == kDefaultCameraProfile);
+    vm.select_profile(CameraProfile::Hd60);
+    assert(vm.state().phase == CameraPhase::Starting);
+    CameraEvent ready;
+    ready.event = "ready";
+    vm.receive(ready, 0);
+    vm.set_zoom(2.0);
+    vm.select_mode(CameraMode::Video);
+    vm.select_profile(CameraProfile::Hd60);
+    assert(vm.state().phase == CameraPhase::Ready);
+    assert(vm.state().profile == CameraProfile::Hd60);
+    assert(vm.state().zoom == 2.0 && vm.state().mode == CameraMode::Video);
+    vm.select_profile(static_cast<CameraProfile>(99));
+    assert(vm.state().profile == CameraProfile::Hd60);
+    vm.select_profile(CameraProfile::FullHd30);
+    assert(vm.state().profile == CameraProfile::FullHd30);
+    vm.shutter();
+    vm.select_profile(CameraProfile::Hd60);
+    assert(vm.state().profile == CameraProfile::FullHd30);
+    assert(vm.state().phase == CameraPhase::StartingRecording);
+    vm.receive(ready, 1);
+    CameraEvent media;
+    media.event = "media";
+    media.kind  = "photo";
+    media.path  = "/tmp/profile.jpg";
+    vm.receive(media, 2);
+    vm.toggle_review();
+    vm.select_profile(CameraProfile::Hd60);
+    assert(vm.state().profile == CameraProfile::FullHd30);
+    assert(vm.state().reviewing);
+}
+
 void test_frame_pixel_limit()
 {
     CameraViewModel vm(false);
@@ -109,6 +144,27 @@ void test_native_startup_retry()
         assert(vm.state().simulated);
         assert(vm.state().error.empty());
         assert(vm.frame().width == 640 && vm.frame().height == 360);
+        vm.select_profile(CameraProfile::Hd60);
+        const auto switch_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (vm.state().phase != CameraPhase::Ready && std::chrono::steady_clock::now() < switch_deadline) {
+            vm.poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        assert(vm.state().phase == CameraPhase::Ready);
+        assert(vm.state().profile == CameraProfile::Hd60);
+        CameraEvent failure;
+        failure.event   = "error";
+        failure.fatal   = true;
+        failure.message = "Test reconnection";
+        vm.receive(failure, 0);
+        vm.retry();
+        const auto reconnect_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (vm.state().phase != CameraPhase::Ready && std::chrono::steady_clock::now() < reconnect_deadline) {
+            vm.poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        assert(vm.state().phase == CameraPhase::Ready);
+        assert(vm.state().profile == CameraProfile::Hd60);
     }
     std::filesystem::remove_all(directory);
     if (had_simulate)
@@ -186,6 +242,7 @@ int main()
         assert(vm.state().phase == CameraPhase::Ready);
         lv_observer_remove(observer);
     }
+    test_capture_profile_selection();
     test_frame_pixel_limit();
     test_operation_error_and_retry_state();
     test_native_startup_retry();

@@ -2,8 +2,87 @@
 #include <cassert>
 #include <iostream>
 
+namespace {
+void test_capture_profiles()
+{
+    CameraModel model;
+    assert(model.state().profile == kDefaultCameraProfile);
+    const auto defaults = camera_profile_settings(kDefaultCameraProfile);
+    assert(defaults.width == 1280 && defaults.height == 720 && defaults.fps == 30);
+    assert(!model.select_profile(CameraProfile::Hd60));
+    CameraEvent event;
+    event.event       = "ready";
+    event.has_profile = true;
+    event.profile     = CameraProfile::FullHd30;
+    model.apply(event, 0);
+    assert(!model.select_profile(CameraProfile::FullHd30));
+    assert(!model.select_profile(static_cast<CameraProfile>(99)));
+    assert(model.select_mode(CameraMode::Video));
+    assert(model.select_profile(CameraProfile::Hd60));
+    assert(model.state().phase == CameraPhase::Reconfiguring);
+    assert(model.state().profile == CameraProfile::FullHd30);
+    assert(model.shutter().empty());
+    assert(!model.select_mode(CameraMode::Photo));
+    assert(!model.select_profile(CameraProfile::Hd60));
+    event.event   = "state";
+    event.state   = "reconfiguring";
+    event.profile = CameraProfile::Hd60;
+    model.apply(event, 1);
+    assert(model.state().profile == CameraProfile::FullHd30);
+    event.state = "ready";
+    model.apply(event, 2);
+    assert(model.state().phase == CameraPhase::Ready);
+    assert(model.state().profile == CameraProfile::Hd60);
+    assert(model.state().mode == CameraMode::Video);
+    assert(model.state().status == "Tap to record · No audio");
+
+    // Failed reconfiguration keeps the worker's restored, confirmed profile.
+    assert(model.select_profile(CameraProfile::FullHd30));
+    CameraEvent failure;
+    failure.event   = "error";
+    failure.message = "Camera mode unavailable";
+    model.apply(failure, 3);
+    assert(model.state().phase == CameraPhase::Reconfiguring);
+    model.apply(event, 4);
+    assert(model.state().phase == CameraPhase::Ready);
+    assert(model.state().profile == CameraProfile::Hd60);
+    assert(model.state().error == failure.message);
+    event.has_profile = false;
+    event.profile     = CameraProfile::FullHd30;
+    model.apply(event, 5);
+    assert(model.state().profile == CameraProfile::Hd60);
+    event.has_profile = true;
+    event.profile     = static_cast<CameraProfile>(99);
+    model.apply(event, 6);
+    assert(model.state().profile == CameraProfile::Hd60);
+
+    event       = {};
+    event.event = "media";
+    event.kind  = "photo";
+    event.path  = "/tmp/profile.jpg";
+    model.apply(event, 7);
+    model.toggle_review();
+    assert(model.state().reviewing);
+    assert(!model.select_profile(CameraProfile::FullHd30));
+    model.toggle_review();
+    for (const char *phase : {"recording", "capturing", "stopping"}) {
+        event       = {};
+        event.event = "state";
+        event.state = phase;
+        model.apply(event, 8);
+        assert(!model.select_profile(CameraProfile::FullHd30));
+    }
+    failure.fatal = true;
+    model.apply(failure, 9);
+    assert(!model.select_profile(CameraProfile::FullHd30));
+    model.retry();
+    assert(model.state().profile == CameraProfile::Hd60);
+}
+}  // namespace
+
 int main()
 {
+    test_capture_profiles();
     CameraModel model;
     assert(model.shutter().empty());
     assert(!model.select_mode(CameraMode::Video));

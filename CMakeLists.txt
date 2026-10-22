@@ -11,55 +11,8 @@ set(LIBCAMERA_DEBIAN_PACKAGE "libcamera0.7" CACHE STRING
     "Debian package matching the libcamera ABI linked by the CM0 BSP")
 
 # The host simulator keeps its synthetic backend and does not need libcamera.
-# The CM0 build links the same libcamera and libcamera-base ABI used by the
-# Raspberry Pi pipeline.  The BSP toolchain exposes CM0_SDK_ROOT; CMAKE_SYSROOT
-# is used as a fallback for other cross toolchains.
 if(NOT CM0_SIMULATOR)
-    set(LIBCAMERA_DEV_ROOT "" CACHE PATH
-        "Optional sysroot or extracted libcamera-dev package root")
-    if(LIBCAMERA_DEV_ROOT)
-        # The BSP toolchain restricts find_* to its sysroot. Search this explicit
-        # target-only development prefix without rewriting it under that root.
-        find_path(LIBCAMERA_INCLUDE_DIR
-            NAMES libcamera/camera.h
-            PATHS "${LIBCAMERA_DEV_ROOT}/include" "${LIBCAMERA_DEV_ROOT}/usr/include"
-            PATH_SUFFIXES libcamera
-            NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
-        find_library(LIBCAMERA_LIBRARY
-            NAMES camera
-            PATHS "${LIBCAMERA_DEV_ROOT}/lib" "${LIBCAMERA_DEV_ROOT}/usr/lib"
-            PATH_SUFFIXES aarch64-linux-gnu
-            NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
-        find_library(LIBCAMERA_BASE_LIBRARY
-            NAMES camera-base
-            PATHS "${LIBCAMERA_DEV_ROOT}/lib" "${LIBCAMERA_DEV_ROOT}/usr/lib"
-            PATH_SUFFIXES aarch64-linux-gnu
-            NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
-    endif()
-    find_path(LIBCAMERA_INCLUDE_DIR
-        NAMES libcamera/camera.h
-        HINTS "${LIBCAMERA_DEV_ROOT}/include"
-              "${LIBCAMERA_DEV_ROOT}/usr/include"
-              "${CM0_SDK_ROOT}/usr/include" "${CMAKE_SYSROOT}/usr/include"
-        PATH_SUFFIXES libcamera)
-    find_library(LIBCAMERA_LIBRARY
-        NAMES camera
-        HINTS "${LIBCAMERA_DEV_ROOT}/lib"
-              "${LIBCAMERA_DEV_ROOT}/usr/lib"
-              "${CM0_SDK_ROOT}/usr/lib" "${CMAKE_SYSROOT}/usr/lib"
-        PATH_SUFFIXES aarch64-linux-gnu)
-    find_library(LIBCAMERA_BASE_LIBRARY
-        NAMES camera-base
-        HINTS "${LIBCAMERA_DEV_ROOT}/lib"
-              "${LIBCAMERA_DEV_ROOT}/usr/lib"
-              "${CM0_SDK_ROOT}/usr/lib" "${CMAKE_SYSROOT}/usr/lib"
-        PATH_SUFFIXES aarch64-linux-gnu)
-    if(NOT LIBCAMERA_INCLUDE_DIR OR NOT LIBCAMERA_LIBRARY OR NOT LIBCAMERA_BASE_LIBRARY)
-        message(FATAL_ERROR
-            "CM0 build requires libcamera headers, libcamera.so and libcamera-base.so "
-            "in the BSP sysroot. Install matching libcamera-dev files or set "
-            "LIBCAMERA_DEV_ROOT to an extracted package root.")
-    endif()
+    include(cmake/Libcamera.cmake)
 endif()
 
 configure_file(
@@ -70,6 +23,7 @@ configure_file(
 add_library(lilygo_ui_camera_core STATIC
     src/pages/camera/camera_model.cpp
     src/pages/camera/camera_process.cpp
+    src/pages/camera/frame_transform.cpp
     src/pages/camera/libcamera_backend.cpp)
 target_include_directories(lilygo_ui_camera_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -147,6 +101,11 @@ if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
     target_link_libraries(camera-core-tests PRIVATE
         lilygo_ui_camera_core)
     add_test(NAME camera-core COMMAND camera-core-tests)
+
+    add_executable(camera-frame-transform-tests tests/test_frame_transform.cpp)
+    target_compile_options(camera-frame-transform-tests PRIVATE -Wall -Wextra -Wpedantic -UNDEBUG)
+    target_link_libraries(camera-frame-transform-tests PRIVATE lilygo_ui_camera_core)
+    add_test(NAME camera-frame-transform COMMAND camera-frame-transform-tests)
 
     add_executable(camera-view-model-tests tests/test_view_model.cpp)
     target_compile_options(camera-view-model-tests PRIVATE

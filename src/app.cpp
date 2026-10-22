@@ -20,11 +20,18 @@ void app_open(const cm0_app_context_t *context)
     lv_obj_set_style_pad_hor(context->root, 0, 0);
     lv_obj_set_style_pad_bottom(context->root, 38, 0);
     lv_obj_set_style_bg_color(context->root, lv_color_hex(0x000000), 0);
-    // The camera is fixed to the panel. Counter-rotate its pixels before LVGL
-    // rotates the complete UI into the panel's native orientation. Read the
-    // display rotation, not the aspect ratio: resizing an SDL window is not a
-    // physical camera rotation. The worker also applies this to saved media.
-    const int camera_rotation   = static_cast<int>(lv_display_get_rotation(lv_obj_get_display(context->root))) * 90;
+    // The CM0 camera needs a further 90-degree counterclockwise correction
+    // relative to the portrait panel after libcamera handles the sensor mount.
+    // SDL's synthetic scene has no physical mounting offset.
+#if defined(CM0_APP_SIMULATOR)
+    constexpr int camera_mount_rotation = 0;
+#else
+    constexpr int camera_mount_rotation = 270;
+#endif
+    // Combine the mounting correction with LVGL scanout compensation. Send the
+    // same angle to preview and media export, including their width/height swap.
+    const int display_rotation  = static_cast<int>(lv_display_get_rotation(lv_obj_get_display(context->root))) * 90;
+    const int camera_rotation   = (display_rotation + camera_mount_rotation) % 360;
     app_state.camera_view_model = std::make_unique<CameraViewModel>(true, camera_rotation);
     app_state.camera_view       = std::make_unique<CameraView>(*app_state.camera_view_model);
     app_state.camera_view->create(context->root);

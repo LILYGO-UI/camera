@@ -1,5 +1,7 @@
 #pragma once
 
+#include "pages/camera/camera_profile.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -11,8 +13,8 @@ struct LibcameraFrame {
     std::vector<std::uint8_t> bgr;
 };
 
-// Small ownership wrapper around libcamera's asynchronous request API.  The
-// UI thread only consumes copied frames; camera callbacks never touch LVGL.
+// Camera callbacks only hand off requests. The camera worker consumes requests
+// and transforms them before returning their buffers to the capture queue.
 class LibcameraBackend {
 public:
     LibcameraBackend();
@@ -20,9 +22,12 @@ public:
     LibcameraBackend(const LibcameraBackend &)            = delete;
     LibcameraBackend &operator=(const LibcameraBackend &) = delete;
 
-    bool open(int rotation, std::string &error);
+    bool open(int rotation, std::string &error, CameraProfile profile = kDefaultCameraProfile);
     void close() noexcept;
-    bool next_frame(LibcameraFrame &frame);
+    // Preview is 640x360 (swapped for portrait). Full resolution is optional,
+    // so ordinary viewfinding does not copy/rotate a full-size image every frame.
+    bool next_frame(LibcameraFrame &preview, LibcameraFrame *full_resolution = nullptr);
+    bool capture_frame(LibcameraFrame &frame, std::string &error);
     bool set_zoom(double zoom, std::string &error);
     std::string sensor() const;
     // Async request failures and disconnects are reported to the UI poll loop.

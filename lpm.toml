@@ -4,12 +4,12 @@ schema_version = 1
 package = "lilygo-ui-camera"
 version = "0.1.0"
 app_id = "cc.lilygo.ui.Camera"
-title = "相机"
-summary = "为 T-DisplayCM0 打造的拍照与录像应用"
-description = "基于 IMX219 与 libcamera C++ API 的相机应用，提供实时取景、JPEG 拍照、1080p 无声录像和最近拍摄预览。"
+title = "Camera"
+summary = "Photo and video app for T-DisplayCM0"
+description = "Camera app powered by IMX219 and the libcamera C++ API, with a live viewfinder, JPEG photos, configurable 1080p/720p silent video recording, and recent capture previews."
 license = "MIT"
-source_repo = "https://github.com/LILYGO-UI/lilygo-ui-camera"
-homepage = "https://github.com/LILYGO-UI/lilygo-ui-camera"
+source_repo = "https://github.com/LILYGO-UI/camera"
+homepage = "https://github.com/LILYGO-UI/camera"
 categories = ["Multimedia"]
 
 [[project.authors]]
@@ -21,21 +21,21 @@ icon = "assets/app-icon.png"
 
 [[project.assets.screenshots]]
 path = "assets/previews/preview1.png"
-caption = "相机取景界面"
+caption = "Camera viewfinder"
 
 [[project.assets.screenshots]]
 path = "assets/previews/camera-landscape.png"
-caption = "横屏相机界面"
+caption = "Landscape camera interface"
 
 [[project.permissions]]
 id = "camera"
-reason = "使用 IMX219 摄像头取景、拍照和录像"
+reason = "Use the IMX219 camera for the viewfinder, photos, and video recording"
 
 [[project.permissions]]
 id = "filesystem"
 access = "read-write"
 scope = "shared-data"
-reason = "将照片和视频保存在用户的 Pictures/Camera 目录或指定拍摄目录"
+reason = "Save photos and videos to the user's $HOME/Camera folder or a specified capture folder"
 
 [project.compatibility]
 architectures = ["arm64"]

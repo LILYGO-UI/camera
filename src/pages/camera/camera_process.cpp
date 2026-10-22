@@ -58,6 +58,59 @@ std::string ffmpeg_path()
     return {};
 }
 
+bool ffmpeg_has_encoder(const std::string &ffmpeg, const char *name)
+{
+    int output[2] = {-1, -1};
+    if (::pipe(output) < 0) return false;
+    for (const int fd : output) fcntl(fd, F_SETFD, FD_CLOEXEC);
+    std::vector<std::string> args = {ffmpeg, "-hide_banner", "-encoders"};
+    std::vector<char *> argv;
+    for (auto &arg : args) argv.push_back(arg.data());
+    argv.push_back(nullptr);
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_adddup2(&actions, output[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addclose(&actions, output[0]);
+    posix_spawn_file_actions_addclose(&actions, output[1]);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    pid_t pid        = -1;
+    const int result = posix_spawn(&pid, argv[0], &actions, nullptr, argv.data(), environ);
+    posix_spawn_file_actions_destroy(&actions);
+    ::close(output[1]);
+    if (result) {
+        ::close(output[0]);
+        return false;
+    }
+    std::string listing;
+    char buffer[4096];
+    for (;;) {
+        const auto count = ::read(output[0], buffer, sizeof(buffer));
+        if (count > 0) {
+            listing.append(buffer, static_cast<std::size_t>(count));
+            continue;
+        }
+        if (count < 0 && errno == EINTR) continue;
+        break;
+    }
+    ::close(output[0]);
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return false;
+    const std::string token = std::string(" ") + name + " ";
+    return listing.find(token) != std::string::npos ||
+           listing.find(std::string(" ") + name + "\n") != std::string::npos;
+}
+
+bool hardware_h264_available(const std::string &ffmpeg)
+{
+    // Raspberry Pi's V4L2 M2M encoder is normally exposed as video10 or
+    // video11. Require both the FFmpeg wrapper and a codec node so desktop
+    // builds do not accidentally select an unusable encoder.
+    const bool codec_node = access("/dev/video10", F_OK) == 0 || access("/dev/video11", F_OK) == 0;
+    return codec_node && ffmpeg_has_encoder(ffmpeg, "h264_v4l2m2m");
+}
+
 void rotate_pixels(const std::vector<std::uint8_t> &source, int source_width, int source_height, int rotation,
                    std::vector<std::uint8_t> &output, int &width, int &height)
 {
@@ -100,8 +153,11 @@ void resize_bgr(const std::vector<std::uint8_t> &source, int source_width, int s
 }  // namespace
 
 namespace {
-// A bounded pipe to the native encoder. No shell or script participates, and
-// all writes/waits run on the camera thread rather than LVGL's event thread.
+// A bounded pipe to the native encoder. No shell or script participates. Video
+// frames are queued to a writer thread so encoder backpressure never blocks the
+// preview path. When the queue is full, the writer keeps a compact deferred
+// frame count and drains it in the background; this preserves the fixed-rate
+// output timeline without making capture wait on software encoding.
 class Encoder {
 public:
     ~Encoder()
@@ -109,13 +165,23 @@ public:
         cancel();
     }
     bool start(const std::string &path, const std::string &log_path, int width, int height, int rotation, bool video,
-               std::string &error)
+               CameraProfile profile, std::string &error)
     {
         cancel();
+        {
+            std::lock_guard<std::mutex> lock(writer_mutex_);
+            writer_queue_.clear();
+            deferred_frame_.reset();
+            deferred_count_ = 0;
+            writer_stop_    = false;
+            writer_abort_   = false;
+            writer_failed_  = false;
+            writer_error_.clear();
+        }
         video_            = video;
         const auto ffmpeg = ffmpeg_path();
         if (ffmpeg.empty()) {
-            error = "找不到 FFmpeg，请检查安装或 CAMERA_FFMPEG。";
+            error = "FFmpeg not found. Check the installation or CAMERA_FFMPEG.";
             return false;
         }
         int sockets[2] = {-1, -1};
@@ -128,33 +194,46 @@ public:
         int one = 1;
         setsockopt(sockets[0], SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
 #endif
-        const std::string size        = rotation % 180 ? "1080:1920" : "1920:1080";
-        std::vector<std::string> args = {ffmpeg,
-                                         "-hide_banner",
-                                         "-loglevel",
-                                         "error",
-                                         "-nostdin",
-                                         "-y",
-                                         "-f",
-                                         "rawvideo",
-                                         "-pix_fmt",
-                                         "bgr24",
-                                         "-video_size",
-                                         std::to_string(width) + "x" + std::to_string(height),
-                                         "-framerate",
-                                         "30",
-                                         "-i",
-                                         "pipe:0",
-                                         "-an",
-                                         "-vf",
-                                         "scale=" + size,
-                                         "-threads",
-                                         "2"};
-        if (video)
-            args.insert(args.end(),
-                        {"-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-movflags", "+faststart"});
-        else
-            args.insert(args.end(), {"-frames:v", "1", "-q:v", "2"});
+        const auto settings           = camera_profile_settings(profile);
+        const int output_width        = rotation % 180 ? settings.height : settings.width;
+        const int output_height       = rotation % 180 ? settings.width : settings.height;
+        const std::string size        = std::to_string(output_width) + ":" + std::to_string(output_height);
+        std::vector<std::string> args = {ffmpeg,        "-hide_banner",
+                                         "-loglevel",   "error",
+                                         "-nostdin",    "-y",
+                                         "-f",          "rawvideo",
+                                         "-pix_fmt",    "bgr24",
+                                         "-video_size", std::to_string(width) + "x" + std::to_string(height),
+                                         "-framerate",  std::to_string(settings.fps),
+                                         "-i",          "pipe:0",
+                                         "-an"};
+        // The capture stream already matches the selected media size. Avoid a
+        // redundant swscale pass in the common case; it adds CPU and memory
+        // pressure on the device during recording.
+        if (width != output_width || height != output_height) args.insert(args.end(), {"-vf", "scale=" + size});
+        // Let libx264 use the available CPU cores when no hardware encoder is
+        // present. The previous fixed two-thread limit made the fallback
+        // encoder fall behind even at 720P30 on CM0.
+        args.insert(args.end(), {"-threads", "0"});
+        const char *codec_request = std::getenv("CAMERA_VIDEO_CODEC");
+        const bool force_hardware = codec_request && std::strcmp(codec_request, "hardware") == 0;
+        const bool force_software = codec_request && std::strcmp(codec_request, "software") == 0;
+        const bool hardware_video = video && !force_software && (force_hardware || hardware_h264_available(ffmpeg));
+        if (video) {
+            if (hardware_video)
+                // Request the common YUV420 hardware input explicitly. The
+                // conversion is still far cheaper than software H.264 coding.
+                args.insert(args.end(),
+                            {"-c:v", "h264_v4l2m2m", "-b:v", "4M", "-pix_fmt", "yuv420p", "-movflags", "+faststart"});
+            else
+                args.insert(args.end(), {"-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-pix_fmt",
+                                         "yuv420p", "-movflags", "+faststart"});
+        } else
+            // The device gallery's bounded TJPGD fallback accepts baseline
+            // JPEGs with common 4:2:0/4:2:2 chroma sampling, but not FFmpeg's
+            // default vertical 4:2:2 layout. Keep camera photos decodable when the
+            // device image does not provide libjpeg.
+            args.insert(args.end(), {"-pix_fmt", "yuv420p", "-frames:v", "1", "-q:v", "2"});
         args.push_back(path);
         std::vector<char *> argv;
         for (auto &arg : args) argv.push_back(arg.data());
@@ -177,13 +256,159 @@ public:
         }
         input_ = sockets[0];
         fcntl(input_, F_SETFL, fcntl(input_, F_GETFL) | O_NONBLOCK);
+        if (video_) {
+            try {
+                writer_ = std::thread([this] { writer_loop(); });
+            } catch (const std::exception &exception) {
+                cancel();
+                error = std::string("Could not start the video encoder worker: ") + exception.what();
+                return false;
+            }
+        }
         return true;
     }
     bool write_frame(const std::vector<std::uint8_t> &pixels, std::string &error)
     {
+        if (video_) return enqueue_frames(pixels, 1, error);
+        return write_frame_blocking(pixels, error, false);
+    }
+    bool write_repeated_frames(const std::vector<std::uint8_t> &pixels, std::size_t count, std::string &error)
+    {
+        if (count == 0) return true;
+        if (!video_) {
+            for (std::size_t index = 0; index < count; ++index)
+                if (!write_frame_blocking(pixels, error, false)) return false;
+            return true;
+        }
+        return enqueue_frames(pixels, count, error);
+    }
+    bool finish(const std::string &path, std::string &error)
+    {
+        std::string writer_error;
+        if (!finish_writer(writer_error)) {
+            // Keep draining/closing the child even when the writer failed. This
+            // makes finish deterministic and lets the caller remove the .part
+            // file without leaving a live ffmpeg process behind.
+            close_input();
+            wait_for_child();
+            error = writer_error;
+            return false;
+        }
+        close_input();
+        const auto deadline = now_ms() + 15000;
+        int status          = 0;
+        while (pid_ > 0) {
+            const auto result = waitpid(pid_, &status, WNOHANG);
+            if (result == pid_) {
+                pid_ = -1;
+                break;
+            }
+            if (result < 0 && errno != EINTR) {
+                pid_  = -1;
+                error = "Could not retrieve the FFmpeg encoding result.";
+                return false;
+            }
+            if (now_ms() >= deadline) {
+                cancel();
+                error = "FFmpeg encoding timed out.";
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        std::error_code ec;
+        const auto bytes = std::filesystem::file_size(path, ec);
+        if (!WIFEXITED(status) || WEXITSTATUS(status) || ec || bytes < 100 || !valid_container(path, bytes)) {
+            error = "Media encoding failed. Check FFmpeg and available storage.";
+            return false;
+        }
+        return true;
+    }
+    void cancel() noexcept
+    {
+        if (writer_.joinable()) {
+            {
+                std::lock_guard<std::mutex> lock(writer_mutex_);
+                writer_abort_ = true;
+                writer_stop_  = true;
+                writer_queue_.clear();
+                deferred_frame_.reset();
+                deferred_count_ = 0;
+            }
+            writer_wake_.notify_one();
+        }
+        close_input();
+        if (writer_.joinable()) writer_.join();
+        if (pid_ > 0) {
+            kill(pid_, SIGKILL);
+            while (waitpid(pid_, nullptr, 0) < 0 && errno == EINTR) {
+            }
+            pid_ = -1;
+        }
+    }
+
+private:
+    // Keep a short burst of raw frames in memory. Once this queue is full, keep
+    // only a shared copy of the newest deferred frame plus its frame count.
+    // The writer drains those deferred frames after the queue advances, so the
+    // capture worker never waits for encoder backpressure.
+    static constexpr std::size_t kMaxQueuedFrames = 12;
+
+    bool enqueue_frames(const std::vector<std::uint8_t> &pixels, std::size_t count, std::string &error)
+    {
+        if (count == 0) return true;
+        std::shared_ptr<std::vector<std::uint8_t>> copy;
+        try {
+            // Repeated catch-up frames share one pixel buffer. This is common
+            // when a worker iteration runs late and avoids multiplying the
+            // memory cost of writing the same most-recent camera frame.
+            copy = std::make_shared<std::vector<std::uint8_t>>(pixels);
+        } catch (const std::exception &exception) {
+            error = std::string("Could not queue an image frame: ") + exception.what();
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(writer_mutex_);
+            if (writer_failed_) {
+                error = writer_error_;
+                return false;
+            }
+            if (writer_stop_ || writer_abort_) {
+                error = writer_failed_ ? writer_error_ : "Video encoder is stopping.";
+                return false;
+            }
+            // Deferred work is kept behind the already queued samples. Reusing
+            // the newest payload for that deferred count bounds memory when the
+            // encoder falls far behind while retaining the fixed-rate timeline.
+            if (deferred_count_ != 0) {
+                deferred_frame_ = copy;
+                deferred_count_ += count;
+                writer_wake_.notify_one();
+                return true;
+            }
+            const auto available = kMaxQueuedFrames - writer_queue_.size();
+            const auto batch     = std::min(count, available);
+            for (std::size_t index = 0; index < batch; ++index) writer_queue_.push_back(copy);
+            if (batch < count) {
+                deferred_frame_ = copy;
+                deferred_count_ = count - batch;
+            }
+            writer_wake_.notify_one();
+        }
+        return true;
+    }
+
+    bool write_frame_blocking(const std::vector<std::uint8_t> &pixels, std::string &error, bool cancellable)
+    {
         const auto deadline = now_ms() + 5000;
         std::size_t offset  = 0;
         while (offset < pixels.size()) {
+            if (cancellable) {
+                std::lock_guard<std::mutex> lock(writer_mutex_);
+                if (writer_abort_) {
+                    error = "Video encoding was cancelled.";
+                    return false;
+                }
+            }
 #if defined(MSG_NOSIGNAL)
             constexpr int flags = MSG_NOSIGNAL;
 #else
@@ -200,54 +425,78 @@ public:
                 ::poll(&fd, 1, 50);
                 continue;
             }
-            error = "FFmpeg 无法接收图像帧，请检查编码器和剩余空间。";
+            error = "FFmpeg could not accept image frames. Check the encoder and available storage.";
             return false;
         }
         return true;
     }
-    bool finish(const std::string &path, std::string &error)
+
+    void writer_loop()
     {
-        close_input();
-        const auto deadline = now_ms() + 15000;
-        int status          = 0;
-        while (pid_ > 0) {
-            const auto result = waitpid(pid_, &status, WNOHANG);
-            if (result == pid_) {
-                pid_ = -1;
-                break;
+        for (;;) {
+            std::shared_ptr<std::vector<std::uint8_t>> frame;
+            {
+                std::unique_lock<std::mutex> lock(writer_mutex_);
+                writer_wake_.wait(lock, [this] {
+                    return writer_abort_ || writer_stop_ || !writer_queue_.empty() || deferred_count_ != 0;
+                });
+                if (writer_abort_) return;
+                if (writer_queue_.empty() && deferred_count_ != 0) {
+                    const auto batch = std::min(deferred_count_, kMaxQueuedFrames);
+                    for (std::size_t index = 0; index < batch; ++index) writer_queue_.push_back(deferred_frame_);
+                    deferred_count_ -= batch;
+                    if (deferred_count_ == 0) deferred_frame_.reset();
+                }
+                if (writer_queue_.empty()) {
+                    if (writer_stop_) return;
+                    continue;
+                }
+                frame = std::move(writer_queue_.front());
+                writer_queue_.pop_front();
             }
-            if (result < 0 && errno != EINTR) {
-                pid_  = -1;
-                error = "无法获取 FFmpeg 编码结果。";
-                return false;
+            std::string error;
+            if (!write_frame_blocking(*frame, error, true)) {
+                std::lock_guard<std::mutex> lock(writer_mutex_);
+                if (!writer_abort_) {
+                    writer_failed_ = true;
+                    writer_error_  = error;
+                }
+                writer_queue_.clear();
+                deferred_frame_.reset();
+                deferred_count_ = 0;
+                writer_stop_    = true;
+                writer_wake_.notify_all();
+                return;
             }
-            if (now_ms() >= deadline) {
-                cancel();
-                error = "FFmpeg 编码超时。";
-                return false;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        std::error_code ec;
-        const auto bytes = std::filesystem::file_size(path, ec);
-        if (!WIFEXITED(status) || WEXITSTATUS(status) || ec || bytes < 100 || !valid_container(path, bytes)) {
-            error = "媒体编码失败，请检查 FFmpeg 和剩余空间。";
+    }
+
+    bool finish_writer(std::string &error)
+    {
+        if (!writer_.joinable()) return true;
+        {
+            std::lock_guard<std::mutex> lock(writer_mutex_);
+            writer_stop_ = true;
+        }
+        writer_wake_.notify_one();
+        writer_.join();
+        std::lock_guard<std::mutex> lock(writer_mutex_);
+        if (writer_failed_) {
+            error = writer_error_;
             return false;
         }
         return true;
     }
-    void cancel() noexcept
+
+    void wait_for_child() noexcept
     {
-        close_input();
         if (pid_ > 0) {
-            kill(pid_, SIGKILL);
             while (waitpid(pid_, nullptr, 0) < 0 && errno == EINTR) {
             }
             pid_ = -1;
         }
     }
 
-private:
     bool valid_container(const std::string &path, std::uint64_t size) const
     {
         std::ifstream file(path, std::ios::binary);
@@ -294,6 +543,16 @@ private:
     pid_t pid_  = -1;
     int input_  = -1;
     bool video_ = false;
+    std::thread writer_;
+    std::mutex writer_mutex_;
+    std::condition_variable writer_wake_;
+    std::deque<std::shared_ptr<std::vector<std::uint8_t>>> writer_queue_;
+    std::shared_ptr<std::vector<std::uint8_t>> deferred_frame_;
+    std::size_t deferred_count_ = 0;
+    bool writer_stop_           = false;
+    bool writer_abort_          = false;
+    bool writer_failed_         = false;
+    std::string writer_error_;
 };
 
 void remove_file(const std::string &path)
@@ -307,6 +566,7 @@ struct CameraProcess::Impl {
     struct Command {
         std::string name;
         double zoom;
+        CameraProfile profile = kDefaultCameraProfile;
     };
     std::unique_ptr<LibcameraBackend> backend;
     std::thread worker;
@@ -317,14 +577,16 @@ struct CameraProcess::Impl {
     CameraFrame preview;
     std::atomic<bool> stopping{false};
     std::atomic<bool> running{false};
-    bool simulated              = false;
-    bool ready                  = false;
-    bool recording              = false;
+    bool simulated = false;
+    bool ready     = false;
+    std::atomic<bool> recording{false};
     int rotation                = 0;
+    CameraProfile profile       = kDefaultCameraProfile;
     double zoom                 = 1;
     std::uint64_t sequence      = 0;
     std::uint64_t last_frame_ms = 0;
     LibcameraFrame frame;
+    LibcameraFrame native_preview;
     Encoder video;
     std::uint64_t recording_started = 0;
     std::uint64_t recorded_frames   = 0;
@@ -338,8 +600,10 @@ struct CameraProcess::Impl {
     }
     void emit(CameraEvent event)
     {
-        event.simulated = simulated;
-        event.zoom      = zoom;
+        event.simulated   = simulated;
+        event.zoom        = zoom;
+        event.profile     = profile;
+        event.has_profile = true;
         std::lock_guard<std::mutex> lock(mutex);
         events.push_back(std::move(event));
     }
@@ -372,7 +636,7 @@ struct CameraProcess::Impl {
         std::error_code ec;
         std::filesystem::rename(temporary, final_path, ec);
         if (ec) {
-            error = "无法保存媒体: " + ec.message();
+            error = "Could not save media: " + ec.message();
             return false;
         }
         CameraEvent event;
@@ -425,7 +689,10 @@ struct CameraProcess::Impl {
         next.width    = rotation % 180 ? 360 : 640;
         next.height   = rotation % 180 ? 640 : 360;
         next.sequence = ++sequence;
-        resize_bgr(frame.bgr, frame.width, frame.height, next.pixels, next.width, next.height);
+        if (simulated)
+            resize_bgr(frame.bgr, frame.width, frame.height, next.pixels, next.width, next.height);
+        else
+            next.pixels = std::move(native_preview.bgr);
         std::lock_guard<std::mutex> lock(mutex);
         preview = std::move(next);
     }
@@ -435,10 +702,15 @@ struct CameraProcess::Impl {
         const auto final_path = media_name("IMG", ".jpg");
         const auto temporary  = final_path + ".part.jpg";
         std::string error;
+        if (!simulated && !backend->capture_frame(frame, error)) {
+            report(error);
+            state("ready");
+            return;
+        }
         Encoder image;
-        bool ok =
-            image.start(temporary, runtime_dir + "/photo.log", frame.width, frame.height, rotation, false, error) &&
-            image.write_frame(frame.bgr, error) && image.finish(temporary, error);
+        bool ok = image.start(temporary, runtime_dir + "/photo.log", frame.width, frame.height, rotation, false,
+                              profile, error) &&
+                  image.write_frame(frame.bgr, error) && image.finish(temporary, error);
         image.cancel();
         if (ok) ok = save_media(temporary, final_path, "photo", error);
         if (!ok) {
@@ -451,8 +723,13 @@ struct CameraProcess::Impl {
     {
         recording_path = media_name("VID", ".mp4");
         std::string error;
+        if (!simulated && !backend->capture_frame(frame, error)) {
+            report(error);
+            state("ready");
+            return;
+        }
         if (!video.start(recording_path + ".part.mp4", runtime_dir + "/video.log", frame.width, frame.height, rotation,
-                         true, error)) {
+                         true, profile, error)) {
             report(error);
             state("ready");
             return;
@@ -461,7 +738,7 @@ struct CameraProcess::Impl {
         recording_started = now_ms();
         recorded_frames   = 0;
         state("recording");
-        record_until(recording_started);
+        record_until(recording_started, true);
     }
     void fail_recording(const std::string &error)
     {
@@ -471,21 +748,25 @@ struct CameraProcess::Impl {
         report(error);
         state("ready");
     }
-    void record_until(std::uint64_t timestamp)
+    void record_until(std::uint64_t timestamp, bool fresh_frame = false)
     {
         // The encoder's timebase follows elapsed time, independent of UI polling.
-        const auto target = std::max<std::uint64_t>(1, (timestamp - recording_started) * 30 / 1000 + 1);
-        if (target > recorded_frames + 60) {
-            fail_recording("视频编码速度不足，录像已停止。");
-            return;
-        }
-        while (recording && recorded_frames < target) {
+        const auto fps    = camera_profile_settings(profile).fps;
+        const auto target = std::max<std::uint64_t>(1, (timestamp - recording_started) * fps / 1000 + 1);
+        // Submit the newest captured frame and repeat it when the worker has
+        // missed a timeline tick. This keeps the saved video's wall-clock
+        // duration stable while the camera backend drops stale requests to
+        // keep the live preview responsive.
+        if (recording) {
+            const auto missing =
+                fresh_frame ? std::size_t{1} : (recorded_frames < target ? target - recorded_frames : 0);
+            if (missing == 0) return;
             std::string error;
-            if (!video.write_frame(frame.bgr, error)) {
+            if (!video.write_repeated_frames(frame.bgr, static_cast<std::size_t>(missing), error)) {
                 fail_recording(error);
                 return;
             }
-            ++recorded_frames;
+            recorded_frames += missing;
         }
     }
     void finish_recording()
@@ -506,6 +787,43 @@ struct CameraProcess::Impl {
         }
         state("ready");
     }
+    bool reopen(CameraProfile requested, std::string &error)
+    {
+        // open() releases the old capture queue before configuring the new one.
+        // Wait for one frame so UI confirmation also proves the stream started.
+        return backend->open(rotation, error, requested) && backend->set_zoom(zoom, error) &&
+               backend->capture_frame(frame, error);
+    }
+    void change_profile(CameraProfile requested)
+    {
+        if (requested == profile) {
+            state("ready");
+            return;
+        }
+        state("reconfiguring");
+        std::string error;
+        if (!simulated && !reopen(requested, error)) {
+            std::string recovery_error;
+            if (!reopen(profile, recovery_error)) {
+                ready = false;
+                report("Failed to switch capture settings: " + error +
+                           " Failed to restore previous settings: " + recovery_error,
+                       true);
+                stopping = true;
+                return;
+            }
+            report("Failed to switch capture settings. Previous settings restored: " + error);
+        } else {
+            profile = requested;
+        }
+        last_frame_ms  = now_ms();
+        native_preview = {};
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            preview = {};
+        }
+        state("ready");
+    }
     void handle(const Command &command)
     {
         if (!ready) return;
@@ -514,7 +832,9 @@ struct CameraProcess::Impl {
             return;
         }
         if (recording) return;
-        if (command.name == "capture")
+        if (command.name == "set_profile")
+            change_profile(command.profile);
+        else if (command.name == "capture")
             capture();
         else if (command.name == "start_recording")
             start_recording();
@@ -539,10 +859,11 @@ struct CameraProcess::Impl {
         auto next_tick = std::chrono::steady_clock::now();
         try {
             while (!stopping.load()) {
-                bool new_frame = simulated || backend->next_frame(frame);
-                if (new_frame && !frame.bgr.empty()) {
+                const bool new_frame = simulated || backend->next_frame(native_preview, recording ? &frame : nullptr);
+                if (new_frame && !(simulated ? frame.bgr : native_preview.bgr).empty()) {
                     last_frame_ms = now_ms();
                     publish_frame();
+                    if (recording) record_until(last_frame_ms, true);
                     if (!ready) {
                         ready = true;
                         CameraEvent event;
@@ -555,7 +876,8 @@ struct CameraProcess::Impl {
                 if (!simulated) {
                     const auto error = backend->last_error();
                     if (!error.empty() || now_ms() - last_frame_ms > 10000) {
-                        report(error.empty() ? "相机取景超时，请检查连接后重试。" : error, true);
+                        report(error.empty() ? "Camera preview timed out. Check the connection and retry." : error,
+                               true);
                         break;
                     }
                 }
@@ -565,8 +887,8 @@ struct CameraProcess::Impl {
                     pending.swap(commands);
                 }
                 for (const auto &command : pending) handle(command);
-                if (recording) record_until(now_ms());
-                next_tick += std::chrono::microseconds(33333);
+                if (recording && !new_frame) record_until(now_ms());
+                next_tick += std::chrono::nanoseconds(1000000000 / camera_profile_settings(profile).fps);
                 const auto now = std::chrono::steady_clock::now();
                 if (next_tick < now) next_tick = now;
                 std::unique_lock<std::mutex> lock(mutex);
@@ -576,7 +898,7 @@ struct CameraProcess::Impl {
         } catch (const std::exception &error) {
             video.cancel();
             if (!recording_path.empty()) remove_file(recording_path + ".part.mp4");
-            report(std::string("相机处理失败: ") + error.what(), true);
+            report(std::string("Camera processing failed: ") + error.what(), true);
         }
         running = false;
     }
@@ -602,35 +924,40 @@ CameraProcess::~CameraProcess()
     stop();
 }
 
-bool CameraProcess::start(std::string &error, int rotation)
+bool CameraProcess::start(std::string &error, int rotation, CameraProfile profile)
 {
+    if (!valid_camera_profile(profile)) {
+        error = "Unsupported capture settings.";
+        return false;
+    }
     if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
-        error = "不支持的相机旋转角度。";
+        error = "Unsupported camera rotation angle.";
         return false;
     }
     stop();
     auto next        = std::make_unique<Impl>();
     next->rotation   = rotation;
+    next->profile    = profile;
     next->simulated  = std::string(setting("CAMERA_SIMULATE", CAMERA_DEFAULT_SIMULATED ? "1" : "0")) == "1";
     next->output_dir = setting("CAMERA_OUTPUT_DIR", "");
     if (next->output_dir.empty()) {
         const char *home = std::getenv("HOME");
         if (!home || !*home) {
-            error = "请设置 CAMERA_OUTPUT_DIR 保存目录。";
+            error = "Please set CAMERA_OUTPUT_DIR to a capture folder.";
             return false;
         }
-        next->output_dir = std::string(home) + "/Pictures/Camera";
+        next->output_dir = std::string(home) + "/Camera";
     }
     std::error_code ec;
     std::filesystem::create_directories(next->output_dir, ec);
     if (ec) {
-        error = "无法创建相机保存目录: " + ec.message();
+        error = "Could not create the capture folder: " + ec.message();
         return false;
     }
     char temporary[]      = "/tmp/lilygo-camera-XXXXXX";
     const char *directory = mkdtemp(temporary);
     if (!directory) {
-        error = "无法创建相机临时目录。";
+        error = "Could not create the camera temporary folder.";
         return false;
     }
     next->runtime_dir = directory;
@@ -638,7 +965,7 @@ bool CameraProcess::start(std::string &error, int rotation)
         next->make_simulated_frame();
     else {
         next->backend = std::make_unique<LibcameraBackend>();
-        if (!next->backend->open(rotation, error)) return false;
+        if (!next->backend->open(rotation, error, profile)) return false;
     }
     next->running = true;
     try {
@@ -664,6 +991,15 @@ bool CameraProcess::send(const std::string &command, double zoom)
     std::lock_guard<std::mutex> lock(impl_->mutex);
     if (impl_->commands.size() >= 16) return false;
     impl_->commands.push_back({command, zoom});
+    return true;
+}
+
+bool CameraProcess::set_profile(CameraProfile profile)
+{
+    if (!valid_camera_profile(profile) || !impl_ || !impl_->running || impl_->recording.load()) return false;
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->commands.size() >= 16) return false;
+    impl_->commands.push_back({"set_profile", 1.0, profile});
     return true;
 }
 

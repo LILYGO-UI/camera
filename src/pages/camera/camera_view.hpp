@@ -18,17 +18,20 @@ private:
     static void key_event(lv_event_t *event);
     static void revision_changed(lv_observer_t *observer, lv_subject_t *subject);
     void refresh();
+    void refresh_images();
     void apply_layout();
     void fit_preview();
 
     struct Widgets {
-        lv_obj_t *surface     = nullptr;
-        lv_obj_t *header      = nullptr;
-        lv_obj_t *grid_button = nullptr;
-        lv_obj_t *body        = nullptr;
-        lv_obj_t *preview     = nullptr;
-        lv_obj_t *image       = nullptr;
-        lv_obj_t *stage       = nullptr;
+        lv_obj_t *surface        = nullptr;
+        lv_obj_t *header         = nullptr;
+        lv_obj_t *grid_button    = nullptr;
+        lv_obj_t *profile_button = nullptr;
+        lv_obj_t *profile_label  = nullptr;
+        lv_obj_t *body           = nullptr;
+        lv_obj_t *preview        = nullptr;
+        lv_obj_t *image          = nullptr;
+        lv_obj_t *stage          = nullptr;
         lv_obj_t *grid[4]{};
         lv_obj_t *badge           = nullptr;
         lv_obj_t *timer           = nullptr;
@@ -63,5 +66,11 @@ private:
     CameraViewModel &view_model_;
     lv_image_dsc_t preview_descriptor_{};
     lv_image_dsc_t thumbnail_descriptor_{};
-    bool laying_out_ = false;
+    CameraState rendered_state_;
+    std::uint64_t preview_sequence_   = 0;
+    std::uint64_t thumbnail_sequence_ = 0;
+    unsigned thumbnail_saved_count_   = 0;
+    bool controls_initialized_        = false;
+    bool images_initialized_          = false;
+    bool laying_out_                  = false;
 };

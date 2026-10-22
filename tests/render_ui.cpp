@@ -185,8 +185,12 @@ int main(int argc, char **argv)
         lv_obj_set_size(parent, LV_PCT(100), LV_PCT(100));
         auto *surface = view.create(parent);
         lv_obj_update_layout(parent);
-        auto *shutter = find(surface, "camera_shutter");
+        auto *shutter       = find(surface, "camera_shutter");
+        auto *profile       = find(surface, "camera_profile");
+        auto *profile_label = find(surface, "camera_profile_label");
         assert(lv_obj_has_state(shutter, LV_STATE_DISABLED));
+        assert(lv_obj_has_state(profile, LV_STATE_DISABLED));
+        assert(std::string(lv_label_get_text(profile_label)) == "720P · 30");
         click(surface, "camera_shutter");
         assert(vm.state().phase == CameraPhase::Starting);
         CameraEvent ready;
@@ -195,6 +199,26 @@ int main(int argc, char **argv)
         vm.receive(ready, now_ms());
         vm.set_frame(sample_frame());
         assert(!lv_obj_has_state(shutter, LV_STATE_DISABLED));
+        assert(!lv_obj_has_state(profile, LV_STATE_DISABLED));
+        click(surface, "camera_profile");
+        assert(vm.state().profile == CameraProfile::Hd60);
+        assert(std::string(lv_label_get_text(profile_label)) == "720P · 60");
+        click(surface, "camera_profile");
+        assert(vm.state().profile == CameraProfile::FullHd30);
+        assert(std::string(lv_label_get_text(profile_label)) == "1080P · 30");
+        click(surface, "camera_profile");
+        assert(vm.state().profile == CameraProfile::Hd30);
+        assert(std::string(lv_label_get_text(profile_label)) == "720P · 30");
+        CameraEvent switching;
+        switching.event = "state";
+        switching.state = "reconfiguring";
+        vm.receive(switching, now_ms());
+        assert(lv_obj_has_state(profile, LV_STATE_DISABLED));
+        assert(lv_obj_has_state(shutter, LV_STATE_DISABLED));
+        assert(std::string(lv_label_get_text(find(surface, "camera_status"))) == "Switching quality…");
+        click(surface, "camera_profile");
+        assert(vm.state().profile == CameraProfile::Hd30);
+        vm.receive(ready, now_ms());
         assert(!lv_obj_has_flag(find(surface, "camera_simulator_badge"), LV_OBJ_FLAG_HIDDEN));
         assert(lv_color_eq(lv_obj_get_style_bg_color(surface, LV_PART_MAIN), lv_color_hex(0x000000)));
         click(surface, "camera_grid");
@@ -206,10 +230,11 @@ int main(int argc, char **argv)
         click(surface, "camera_shutter");
         assert(vm.state().phase == CameraPhase::Capturing);
         assert(lv_obj_has_state(shutter, LV_STATE_DISABLED));
+        assert(lv_obj_has_state(profile, LV_STATE_DISABLED));
         CameraEvent media;
         media.event = "media";
         media.kind  = "photo";
-        media.path  = "/Pictures/Camera/IMG_20260922_164208.jpg";
+        media.path  = "/Camera/IMG_20260922_164208.jpg";
         vm.receive(media, now_ms());
         CameraEvent idle;
         idle.event = "state";
@@ -218,6 +243,7 @@ int main(int argc, char **argv)
         assert(vm.state().saved_count == 1);
         click(surface, "camera_gallery");
         assert(vm.state().reviewing);
+        assert(lv_obj_has_state(profile, LV_STATE_DISABLED));
         assert(!lv_obj_has_flag(find(surface, "camera_review"), LV_OBJ_FLAG_HIDDEN));
         click(surface, "camera_review_close");
         assert(!vm.state().reviewing);
@@ -237,6 +263,7 @@ int main(int argc, char **argv)
         vm.receive(recording, now_ms() - 65000);
         vm.poll();
         assert(vm.state().phase == CameraPhase::Recording);
+        assert(lv_obj_has_state(profile, LV_STATE_DISABLED));
         assert(std::string(lv_label_get_text(find(surface, "camera_timer"))) == "00:01:05");
         click(surface, "camera_mode_photo");
         assert(vm.state().mode == CameraMode::Video);
@@ -244,7 +271,7 @@ int main(int argc, char **argv)
         assert(vm.state().phase == CameraPhase::Stopping);
         assert(lv_obj_has_state(shutter, LV_STATE_DISABLED));
         media.kind = "video";
-        media.path = "/Pictures/Camera/VID_20260922_164245.mp4";
+        media.path = "/Camera/VID_20260922_164245.mp4";
         vm.receive(media, now_ms());
         vm.receive(idle, now_ms());
         assert(vm.state().saved_count == 2);
@@ -252,18 +279,36 @@ int main(int argc, char **argv)
         // Reflow this exact page twice, retaining mode, count, and grid state.
         lv_obj_set_size(parent, height, width);
         lv_obj_update_layout(parent);
+        assert(lv_obj_get_width(find(surface, "camera_image_stage")) == height);
         lv_obj_set_size(parent, width, height);
         lv_obj_update_layout(parent);
         assert(vm.state().mode == CameraMode::Video && vm.state().saved_count == 2 && vm.state().grid);
-        for (const char *name : {"camera_shutter", "camera_gallery", "camera_modes", "camera_grid", "camera_zoom"})
+        for (const char *name :
+             {"camera_shutter", "camera_gallery", "camera_modes", "camera_grid", "camera_zoom", "camera_profile"})
             inside(find(surface, name), width, height);
         auto *stage = find(surface, "camera_image_stage");
-        assert(std::abs(lv_obj_get_width(stage) * 9 - lv_obj_get_height(stage) * 16) <= 16);
+        assert(lv_obj_get_width(stage) == width);
+        // A real portrait sensor frame used to shrink to fit the available height.
+        // Both orientations must reach the page edges with uniform image scaling.
+        for (bool portrait_source : {true, false}) {
+            auto frame = sample_frame();
+            if (portrait_source) std::swap(frame.width, frame.height);
+            const int source_width = frame.width;
+            vm.set_frame(std::move(frame));
+            lv_obj_update_layout(parent);
+            lv_area_t area;
+            lv_obj_get_coords(stage, &area);
+            assert(area.x1 == 0 && area.x2 == width - 1);
+            inside(stage, width, height);
+            auto *image = find(surface, "camera_live_image");
+            assert(lv_image_get_scale_x(image) == lv_image_get_scale_y(image));
+            assert(source_width * lv_image_get_scale_x(image) >= width * LV_SCALE_NONE);
+        }
 
         CameraEvent failure;
         failure.event   = "error";
         failure.fatal   = true;
-        failure.message = "未找到可用相机，请检查连接后重试。";
+        failure.message = "No camera found. Check the connection and retry.";
         vm.receive(failure, now_ms());
         assert(!lv_obj_has_flag(find(surface, "camera_message"), LV_OBJ_FLAG_HIDDEN));
         click(surface, "camera_retry");

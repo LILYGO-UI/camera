@@ -33,6 +33,7 @@ public:
     }
 
     void select_mode(CameraMode mode);
+    void select_profile(CameraProfile profile);
     void shutter();
     void toggle_grid();
     void toggle_review();

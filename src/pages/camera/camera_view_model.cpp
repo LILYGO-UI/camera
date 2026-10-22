@@ -19,7 +19,7 @@ CameraViewModel::CameraViewModel(bool start_backend, int rotation)
     if (backend_enabled_) {
         start();
         timer_ = lv_timer_create(
-            [](lv_timer_t *timer) { static_cast<CameraViewModel *>(lv_timer_get_user_data(timer))->poll(); }, 50, this);
+            [](lv_timer_t *timer) { static_cast<CameraViewModel *>(lv_timer_get_user_data(timer))->poll(); }, 33, this);
     }
 }
 
@@ -33,7 +33,7 @@ void CameraViewModel::start()
 {
     process_ = std::make_unique<CameraProcess>();
     std::string error;
-    if (!process_->start(error, rotation_)) {
+    if (!process_->start(error, rotation_, state().profile)) {
         CameraEvent event;
         event.event   = "error";
         event.fatal   = true;
@@ -52,6 +52,29 @@ void CameraViewModel::select_mode(CameraMode mode)
     if (model_.select_mode(mode)) publish();
 }
 
+void CameraViewModel::select_profile(CameraProfile profile)
+{
+    if (!model_.select_profile(profile)) return;
+    publish();
+    if (process_) {
+        if (!process_->set_profile(profile)) {
+            CameraEvent event;
+            event.event   = "error";
+            event.fatal   = true;
+            event.message = "Camera service disconnected. Please retry.";
+            receive(event, now_ms());
+        }
+    } else if (!backend_enabled_) {
+        CameraEvent event;
+        event.event       = "state";
+        event.state       = "ready";
+        event.zoom        = state().zoom;
+        event.profile     = profile;
+        event.has_profile = true;
+        receive(event, now_ms());
+    }
+}
+
 void CameraViewModel::shutter()
 {
     const auto command = model_.shutter();
@@ -61,7 +84,7 @@ void CameraViewModel::shutter()
         CameraEvent event;
         event.event   = "error";
         event.fatal   = true;
-        event.message = "相机服务连接中断，请重试。";
+        event.message = "Camera service disconnected. Please retry.";
         receive(event, now_ms());
     }
 }
@@ -85,7 +108,7 @@ void CameraViewModel::set_zoom(double zoom)
             CameraEvent event;
             event.event   = "error";
             event.fatal   = true;
-            event.message = "相机服务连接中断，请重试。";
+            event.message = "Camera service disconnected. Please retry.";
             receive(event, now_ms());
         }
     } else if (!backend_enabled_) {
