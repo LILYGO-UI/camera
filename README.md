@@ -209,11 +209,15 @@ lpm pack
 ```
 
 The first device configuration downloads and verifies CM0 BSP `0.1.0` and caches
-its sysroot in `.cache/cm0-bsp/0.1.0`. The BSP includes the libcamera runtime
-but not its development headers. If needed, CMake downloads and verifies the
-matching Raspberry Pi `libcamera-dev` package (`0.7.2+rpt20260817-1`) and
-caches it alongside the BSP. The first download requires access to the
-corresponding release/package host; later builds reuse the cache.
+its sysroot in `.cache/cm0-bsp/0.1.0`. The BSP runtime is older than the target
+image runtime, so the device build must use a matching target development root
+containing the `0.7.2+rpt20261009-1` headers and libraries:
+
+```sh
+cmake --preset cm0-cross \
+  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.7.2+rpt20261009-1
+lpm pack --preset cm0-cross
+```
 
 If you already have matching libcamera development files, provide their root
 during CMake configuration with
@@ -222,7 +226,7 @@ during CMake configuration with
 libcamera ABI must also supply matching target libraries and set
 `LIBCAMERA_DEBIAN_PACKAGE` to the runtime package name on the device.
 
-The package is written to `dist/lilygo-ui-camera_0.1.0_arm64.deb`. It depends on
+The package is written to `dist/lilygo-ui-camera_0.1.1_arm64.deb`. It depends on
 `lilygo-ui-appkit-dev >= 0.1.0` for the shared runtime fonts as well as the
 camera and media libraries. Make sure the AppKit package is available from the
 device's configured package sources. On the CM0 Raspberry Pi OS image, install
@@ -231,7 +235,7 @@ the runtime dependencies and package:
 ```sh
 sudo apt update
 sudo apt install libcamera0.7 libcamera-ipa ffmpeg
-sudo apt install ./lilygo-ui-camera_0.1.0_arm64.deb
+sudo apt install ./lilygo-ui-camera_0.1.1_arm64.deb
 ```
 
 Launch **Camera** from the app launcher. To run it directly, the user needs

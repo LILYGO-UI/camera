@@ -182,23 +182,28 @@ lpm pack
 ```
 
 首次配置设备构建时会下载并校验 CM0 BSP `0.1.0`，并将 sysroot 缓存到
-`.cache/cm0-bsp/0.1.0`。BSP 包含 libcamera 运行库，但不含开发头文件。如需要，CMake 会下载并校验
-匹配的 Raspberry Pi `libcamera-dev` 软件包（`0.7.2+rpt20260817-1`），并与 BSP 一起缓存。
-首次下载需要访问相应的软件包/发行版主机；后续构建会复用缓存。
+`.cache/cm0-bsp/0.1.0`。当前 BSP 中的运行库版本较旧，设备构建必须通过
+`LIBCAMERA_DEV_ROOT` 指向与目标镜像一致、同时包含 `0.7.2+rpt20261009-1` 头文件和库的目录：
+
+```sh
+cmake --preset cm0-cross \
+  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.7.2+rpt20261009-1
+lpm pack --preset cm0-cross
+```
 
 如果已有匹配的 libcamera 开发文件，可在 CMake 配置时通过
 `-DLIBCAMERA_DEV_ROOT=/path/to/libcamera-dev` 指定根目录。目录可包含
 `usr/include` 和 `usr/lib`，也可直接包含 `include` 与 `lib`。自定义 BSP 或 libcamera ABI
 还必须提供匹配的目标库，并通过 `LIBCAMERA_DEBIAN_PACKAGE` 设置设备上的运行时软件包名。
 
-软件包输出到 `dist/lilygo-ui-camera_0.1.0_arm64.deb`。它依赖
+软件包输出到 `dist/lilygo-ui-camera_0.1.1_arm64.deb`。它依赖
 `lilygo-ui-appkit-dev >= 0.1.0` 提供共享运行时字体，并依赖相机和媒体库。
 请确保设备配置的软件源中包含 AppKit 软件包。在 CM0 Raspberry Pi OS 镜像上安装运行依赖和应用软件包：
 
 ```sh
 sudo apt update
 sudo apt install libcamera0.7 libcamera-ipa ffmpeg
-sudo apt install ./lilygo-ui-camera_0.1.0_arm64.deb
+sudo apt install ./lilygo-ui-camera_0.1.1_arm64.deb
 ```
 
 从应用启动器打开“相机”。如需直接运行，当前用户需要访问摄像头、DRM 和输入设备的权限，

@@ -52,9 +52,13 @@ find_library(LIBCAMERA_BASE_LIBRARY
     PATH_SUFFIXES aarch64-linux-gnu)
 
 function(_camera_fetch_libcamera_headers output)
-    # This package matches the runtime shipped in CM0 BSP 0.1.0 exactly.
-    set(_version "0.7.2+rpt20260817-1")
-    set(_sha256 "b799340d3f753563f583f705af26411b45d8426b6f13d0b734b4da0872bb3b62")
+    # This package must match the target runtime exactly. libcamera's C++ ABI
+    # can change while the SONAME remains libcamera.so.0.7.
+    if(NOT LIBCAMERA_PINNED_VERSION)
+        message(FATAL_ERROR "LIBCAMERA_PINNED_VERSION is not set")
+    endif()
+    set(_version "${LIBCAMERA_PINNED_VERSION}")
+    set(_sha256 "5761f70c4ce40f52b7c95eb95950914349f55720f99b84cbeacfffb5f3d8bc0a")
     set(_package "libcamera-dev_${_version}_arm64.deb")
     set(_cache "${CM0_BSP_CACHE_DIR}/libcamera/${_version}")
     set(_root "${_cache}/arm64")
@@ -124,6 +128,7 @@ set(_libcamera_bsp_libdir "${CM0_SDK_ROOT}/usr/lib/aarch64-linux-gnu")
 if(CM0_BSP_VERSION STREQUAL "0.1.0" AND
    CM0_BSP_CACHE_DIR AND NOT LIBCAMERA_DEV_ROOT AND
    LIBCAMERA_DEBIAN_PACKAGE STREQUAL "libcamera0.7" AND
+   LIBCAMERA_PINNED_VERSION STREQUAL "0.7.2+rpt20260817-1" AND
    EXISTS "${_libcamera_bsp_libdir}/libcamera.so.0.7.2" AND
    EXISTS "${_libcamera_bsp_libdir}/libcamera-base.so.0.7.2")
     if(NOT LIBCAMERA_INCLUDE_DIR)

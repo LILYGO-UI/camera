@@ -3,12 +3,20 @@ cmake_minimum_required(VERSION 3.21)
 include(cmake/LpmMetadata.cmake)
 project(${LILYGO_UI_CMAKE_PROJECT_NAME} LANGUAGES C CXX)
 
+# Device packages must resolve libcamera from the target image. Do not embed
+# the host-side sysroot or temporary development prefix in the ELF RPATH.
+if(CMAKE_CROSSCOMPILING)
+    set(CMAKE_SKIP_RPATH ON)
+endif()
+
 include(GNUInstallDirs)
 include(CTest)
 find_package(LilyGoUI CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 set(LIBCAMERA_DEBIAN_PACKAGE "libcamera0.7" CACHE STRING
     "Debian package matching the libcamera ABI linked by the CM0 BSP")
+set(LIBCAMERA_PINNED_VERSION "0.7.2+rpt20261009-1" CACHE STRING
+    "libcamera version pinned by the target CM0 image runtime and development files")
 
 # The host simulator keeps its synthetic backend and does not need libcamera.
 if(NOT CM0_SIMULATOR)
@@ -30,7 +38,7 @@ target_include_directories(lilygo_ui_camera_core PUBLIC
     ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_compile_options(lilygo_ui_camera_core PRIVATE
     -Wall -Wextra -Wpedantic)
-target_compile_features(lilygo_ui_camera_core PUBLIC cxx_std_17)
+target_compile_features(lilygo_ui_camera_core PUBLIC cxx_std_20)
 target_link_libraries(lilygo_ui_camera_core PUBLIC Threads::Threads)
 if(NOT CM0_SIMULATOR)
     target_include_directories(lilygo_ui_camera_core PRIVATE
@@ -175,7 +183,7 @@ set(CPACK_COMPONENTS_ALL app)
 set(CPACK_DEBIAN_APP_PACKAGE_NAME "${LILYGO_UI_PACKAGE_NAME}")
 set(CPACK_DEBIAN_APP_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_APP_PACKAGE_DEPENDS
-    "libc6, libstdc++6, libdrm2, libfreetype6, ${LIBCAMERA_DEBIAN_PACKAGE}, libcamera-ipa, ffmpeg, lilygo-ui-appkit-dev (>= ${LILYGO_UI_MIN_APPKIT_VERSION})")
+    "libc6, libstdc++6, libdrm2, libfreetype6, ${LIBCAMERA_DEBIAN_PACKAGE} (= ${LIBCAMERA_PINNED_VERSION}), libcamera-ipa (= ${LIBCAMERA_PINNED_VERSION}), ffmpeg, lilygo-ui-appkit-dev (>= ${LILYGO_UI_MIN_APPKIT_VERSION})")
 set(CPACK_DEBIAN_APP_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 if(CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")

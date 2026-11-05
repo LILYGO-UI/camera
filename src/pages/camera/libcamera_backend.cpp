@@ -15,6 +15,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <span>
 #include <utility>
 
 #if CAMERA_HAS_LIBCAMERA
@@ -87,7 +88,7 @@ bool duration_bound(const libcamera::ControlValue &value, bool lower, std::int64
     if (!value.isArray()) {
         bound = value.get<std::int64_t>();
     } else {
-        const auto values = value.get<libcamera::Span<const std::int64_t>>();
+        const auto values = value.get<std::span<const std::int64_t>>();
         // libcamera pipelines may describe an array control with scalar bounds
         // or with a bound for each element. Both duration limits must fit.
         bound =
