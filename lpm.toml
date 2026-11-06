@@ -2,7 +2,7 @@ schema_version = 1
 
 [project]
 package = "lilygo-ui-camera"
-version = "0.1.1"
+version = "0.1.2"
 app_id = "cc.lilygo.ui.Camera"
 title = "Camera"
 summary = "Photo and video app for T-DisplayCM0"
