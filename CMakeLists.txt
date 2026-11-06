@@ -11,6 +11,8 @@ endif()
 
 include(GNUInstallDirs)
 include(CTest)
+# Match the 50 Hz panel in LVGL, the statically linked SDK, and this application.
+add_compile_definitions(LV_DEF_REFR_PERIOD=20)
 find_package(LilyGoUI CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 set(LIBCAMERA_DEBIAN_PACKAGE "libcamera0.7" CACHE STRING
