@@ -30,12 +30,12 @@ if(LIBCAMERA_DEV_ROOT)
     find_library(LIBCAMERA_LIBRARY
         NAMES camera
         PATHS "${LIBCAMERA_DEV_ROOT}/lib" "${LIBCAMERA_DEV_ROOT}/usr/lib"
-        PATH_SUFFIXES aarch64-linux-gnu
+        PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE}
         NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
     find_library(LIBCAMERA_BASE_LIBRARY
         NAMES camera-base
         PATHS "${LIBCAMERA_DEV_ROOT}/lib" "${LIBCAMERA_DEV_ROOT}/usr/lib"
-        PATH_SUFFIXES aarch64-linux-gnu
+        PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE}
         NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
 endif()
 find_path(LIBCAMERA_INCLUDE_DIR
@@ -45,11 +45,11 @@ find_path(LIBCAMERA_INCLUDE_DIR
 find_library(LIBCAMERA_LIBRARY
     NAMES camera
     HINTS "${CM0_SDK_ROOT}/usr/lib" "${CMAKE_SYSROOT}/usr/lib"
-    PATH_SUFFIXES aarch64-linux-gnu)
+    PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE})
 find_library(LIBCAMERA_BASE_LIBRARY
     NAMES camera-base
     HINTS "${CM0_SDK_ROOT}/usr/lib" "${CMAKE_SYSROOT}/usr/lib"
-    PATH_SUFFIXES aarch64-linux-gnu)
+    PATH_SUFFIXES ${CMAKE_LIBRARY_ARCHITECTURE})
 
 function(_camera_fetch_libcamera_headers output)
     # This package must match the target runtime exactly. libcamera's C++ ABI
@@ -148,7 +148,7 @@ endif()
 
 if(NOT LIBCAMERA_INCLUDE_DIR OR NOT LIBCAMERA_LIBRARY OR NOT LIBCAMERA_BASE_LIBRARY)
     message(FATAL_ERROR
-        "CM0 build requires libcamera headers, libcamera.so and libcamera-base.so "
-        "in the BSP sysroot. Install matching libcamera-dev files or set "
+        "Device build requires libcamera headers, libcamera.so and libcamera-base.so "
+        "in the target sysroot. Install matching libcamera-dev files or set "
         "LIBCAMERA_DEV_ROOT to an extracted package root.")
 endif()

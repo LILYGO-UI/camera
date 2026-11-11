@@ -35,6 +35,27 @@
         "BUILD_TESTING": "OFF",
         "CMAKE_INSTALL_PREFIX": "/usr"
       }
+    },
+    {
+      "name": "k230-debian",
+      "displayName": "T-Display-K230 Debian riscv64",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/k230-debian",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/k230-debian-toolchain.cmake",
+        "LILYGO_UI_PLATFORM": "k230",
+        "LILYGO_UI_TARGET_OS": "debian",
+        "LILYGO_UI_RENDERER": "software",
+        "CM0_SIMULATOR": "OFF",
+        "CM0_FETCH_LVGL": "OFF",
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "CMAKE_INSTALL_PREFIX": "/usr",
+        "CMAKE_INSTALL_LIBDIR": {
+          "type": "STRING",
+          "value": "lib"
+        }
+      }
     }
   ],
   "buildPresets": [
@@ -45,6 +66,10 @@
     {
       "name": "cm0-cross",
       "configurePreset": "cm0-cross"
+    },
+    {
+      "name": "k230-debian",
+      "configurePreset": "k230-debian"
     }
   ],
   "testPresets": [

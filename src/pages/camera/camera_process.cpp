@@ -1,6 +1,7 @@
 #include "pages/camera/camera_process.hpp"
 
 #include "pages/camera/libcamera_backend.hpp"
+#include "platform_paths.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -107,7 +108,8 @@ bool hardware_h264_available(const std::string &ffmpeg)
     // Raspberry Pi's V4L2 M2M encoder is normally exposed as video10 or
     // video11. Require both the FFmpeg wrapper and a codec node so desktop
     // builds do not accidentally select an unusable encoder.
-    const bool codec_node = access("/dev/video10", F_OK) == 0 || access("/dev/video11", F_OK) == 0;
+    const bool codec_node = access(LILYGO_UI_DEFAULT_CAMERA_CODEC_PATH_0, F_OK) == 0 ||
+                            access(LILYGO_UI_DEFAULT_CAMERA_CODEC_PATH_1, F_OK) == 0;
     return codec_node && ffmpeg_has_encoder(ffmpeg, "h264_v4l2m2m");
 }
 
@@ -787,12 +789,18 @@ struct CameraProcess::Impl {
         }
         state("ready");
     }
-    bool reopen(CameraProfile requested, std::string &error)
+    bool configure_profile(CameraProfile requested, std::string &error)
     {
-        // open() releases the old capture queue before configuring the new one.
-        // Wait for one frame so UI confirmation also proves the stream started.
-        return backend->open(rotation, error, requested) && backend->set_zoom(zoom, error) &&
-               backend->capture_frame(frame, error);
+        // Let each backend choose whether a stream restart is needed. K230
+        // must keep its native ISP configuration across output-size changes.
+        // Confirm a frame before publishing the new profile to the UI.
+        if (!backend->set_profile(requested, error) || !backend->set_zoom(zoom, error) ||
+            !backend->capture_frame(frame, error))
+            return false;
+        // A K230 profile change keeps the stream, including its failure state.
+        // Do not report recovery if a previous capture failure is still active.
+        error = backend->last_error();
+        return error.empty();
     }
     void change_profile(CameraProfile requested)
     {
@@ -802,9 +810,9 @@ struct CameraProcess::Impl {
         }
         state("reconfiguring");
         std::string error;
-        if (!simulated && !reopen(requested, error)) {
+        if (!simulated && !configure_profile(requested, error)) {
             std::string recovery_error;
-            if (!reopen(profile, recovery_error)) {
+            if (!configure_profile(profile, recovery_error)) {
                 ready = false;
                 report("Failed to switch capture settings: " + error +
                            " Failed to restore previous settings: " + recovery_error,

@@ -14,7 +14,9 @@ struct LibcameraFrame {
 };
 
 // Camera callbacks only hand off requests. The camera worker consumes requests
-// and transforms them before returning their buffers to the capture queue.
+// and transforms them before returning their buffers to the capture queue. The
+// class name is retained for the existing application interface; K230 builds
+// provide the same contract through the board's V4L2 ISP pipeline.
 class LibcameraBackend {
 public:
     LibcameraBackend();
@@ -23,6 +25,9 @@ public:
     LibcameraBackend &operator=(const LibcameraBackend &) = delete;
 
     bool open(int rotation, std::string &error, CameraProfile profile = kDefaultCameraProfile);
+    // K230 keeps native capture running and changes only the software output.
+    // libcamera reconfigures its stream to match the requested profile.
+    bool set_profile(CameraProfile profile, std::string &error);
     void close() noexcept;
     // Preview is 640x360 (swapped for portrait). Full resolution is optional,
     // so ordinary viewfinding does not copy/rotate a full-size image every frame.

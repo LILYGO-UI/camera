@@ -38,7 +38,7 @@ scope = "shared-data"
 reason = "Save photos and videos to the user's $HOME/Camera folder or a specified capture folder"
 
 [project.compatibility]
-architectures = ["arm64"]
+architectures = ["arm64", "riscv64"]
 min_appkit_version = "0.1.0"
 
 [project.launcher]
@@ -48,6 +48,10 @@ order = 90
 host_preset = "host-simulator"
 cross_preset = "cm0-cross"
 package_dir = "dist"
+
+[build.cross_presets]
+arm64 = "cm0-cross"
+riscv64 = "k230-debian"
 
 [deploy]
 host = "raspberrypi.local"

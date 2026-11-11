@@ -2,10 +2,10 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-LILYGO Camera is a local camera app for the T-DisplayCM0 and its Sony IMX219
-camera. It is built with C++17, [LILYGO UI AppKit](https://github.com/LILYGO-UI/cm0-appkit),
-LVGL, and the libcamera C++ API. The interface supports portrait and landscape
-layouts and saves photos and videos on the device.
+LILYGO Camera is a local camera app for T-DisplayCM0 and T-Display-K230. It is
+built with C++17, [LILYGO UI AppKit](https://github.com/LILYGO-UI/cm0-appkit),
+LVGL, and the platform camera backend. The interface supports portrait and
+landscape layouts and saves photos and videos on the device.
 
 The project includes an SDL2 desktop simulator for development and testing, and
 an AArch64 Linux package for CM0 devices.
@@ -62,8 +62,38 @@ not use the physical mounting offset.
 
 The profiles describe requested capture and encoding settings, not guaranteed
 hardware performance. In particular, whether `720P · 60` is achievable depends
-on the CM0 image, sensor mode, libcamera pipeline, and encoder. Verify actual
-capture frame rates and output on the target device.
+on the image, sensor mode, camera pipeline, and encoder. Verify actual capture
+frame rates and output on the target device.
+
+T-Display-K230 uses a different camera stack:
+
+| Component | Configuration |
+| --- | --- |
+| Image sensor | GalaxyCore GC2093, I2C0 address `0x37` |
+| Camera interface | CSI2/MIPI0 through the BSP VVCAM pipeline |
+| Capture node | VVCAM SP2 (`vvcam-video.*.2`) preferred; other NV16/NV12 capture nodes are fallbacks (override with `CAMERA_K230_DEVICE`) |
+| Pixel format | NV16 (NV12 fallback) |
+| Sensor capture | Fixed `1920×1080`; preview and 720P media are sampled in software |
+| ISP startup | `/usr/bin/isp_media_server` with `ISP_MEDIA_SENSOR_DRIVER=/usr/lib/libvvcam.so` |
+
+The K230 backend starts or reuses `isp_media_server`, scans the V4L2 nodes for a
+capture device that exposes NV16 or NV12, preferring the SP2 scaling output by
+its sysfs name, and converts those frames to the app's
+BGR preview format. It does not
+use libcamera or the CM0 IMX219 path. Stop the board's RTSP stream before
+opening Camera because both paths use the same ISP pipeline. See the
+[official T-Display-K230 repository](https://github.com/Xinyuan-LilyGO/T-Display-K230)
+for the board and driver setup. The v0.2.9 BSP can produce displaced rows and
+chroma when switching from 1080P back to 720P, including on SP2. K230 therefore
+keeps native 1080P capture and the same capture queue running across profile
+changes. Only software output dimensions and encoding cadence change; ordinary
+preview converts only its sampled pixels. The requested 60 fps profile does
+not configure or guarantee 60 distinct sensor frames per second. Do not query
+an active capture node with another process: this BSP can destroy the shared
+pipeline when that process closes its device handle. A running ISP
+service is reused and is never killed by the application. Debian images with
+`CONFIG_RT_GROUP_SCHED` and cgroup v2 need the ISP thread compatibility library
+installed by canaan-gen when `BSP_CAMERA_RUNTIME=1`.
 
 ## Development Environment
 
@@ -226,6 +256,14 @@ during CMake configuration with
 libcamera ABI must also supply matching target libraries and set
 `LIBCAMERA_DEBIAN_PACKAGE` to the runtime package name on the device.
 
+K230 builds use the BSP camera path directly: the application starts
+`isp_media_server` with `ISP_MEDIA_SENSOR_DRIVER=/usr/lib/libvvcam.so`, then
+scans `/dev/video*` for a V4L2 capture node. NV16 is preferred and NV12 is
+accepted as a fallback. K230 builds therefore do not require libcamera headers
+or runtime packages. The camera service must expose the GC2093 node and the
+application user must have access to the selected video node; set
+`CAMERA_K230_DEVICE` when a fixed node is required.
+
 The package is written to `dist/lilygo-ui-camera_0.1.1_arm64.deb`. It depends on
 `lilygo-ui-appkit-dev >= 0.1.0` for the shared runtime fonts as well as the
 camera and media libraries. Make sure the AppKit package is available from the
@@ -275,7 +313,8 @@ frames per second.
 | Environment variable | Purpose |
 | --- | --- |
 | `CAMERA_SIMULATE=1` | Use the synthetic viewfinder and simulated capture backend. |
-| `CAMERA_SIMULATE=0` | Use the real libcamera backend; this is the device-build default. |
+| `CAMERA_SIMULATE=0` | Use the real platform backend; this is the device-build default. |
+| `CAMERA_K230_DEVICE` | Override the K230 V4L2 node. If unset, the backend scans `/dev/video*` and prefers the VVCAM SP2 output by its sysfs name, then tries other NV16/NV12 capture nodes. |
 | `CAMERA_OUTPUT_DIR` | Override the capture directory. |
 | `CAMERA_FFMPEG` | Set the FFmpeg executable path; by default it is searched on `PATH`. |
 | `CAMERA_VIDEO_CODEC` | Select `auto` (default), `hardware`, or `software` H.264 encoding. |
@@ -292,9 +331,10 @@ background and confirms the output before reporting a successful save.
 | `lpm is required to read project metadata` | Activate `.venv`, install LPM, or set `LPM_EXECUTABLE`. |
 | AppKit or LVGL sources are missing | Run `git submodule update --init --recursive`. |
 | SDL2 or FreeType is not found | Install the host development packages; on macOS, check Homebrew paths. |
-| BSP or libcamera development files cannot be downloaded/found | Check network access and disk space, or configure `LIBCAMERA_DEV_ROOT` with matching target files. |
-| IMX219 is not detected | Check the camera cable, board overlay, I2C0 pin setup, and kernel camera probe logs. |
-| Camera is detected but no preview appears | Check that another process is not using the camera and that `libcamera-ipa` matches `libcamera0.7`. |
+| BSP or libcamera development files cannot be downloaded/found | Check network access and disk space, or configure `LIBCAMERA_DEV_ROOT` with matching CM0 target files. |
+| IMX219 is not detected | On CM0, check the camera cable, board overlay, I2C0 pin setup, and kernel camera probe logs. |
+| K230 camera pipeline is unavailable | Stop RTSP, confirm `isp_media_server` and `/usr/lib/libvvcam.so`, inspect `/tmp/isp.err.log`, and use `v4l2-ctl --list-devices`/`--list-formats-ext` to find a selected node exposing NV16 or NV12. |
+| Camera is detected but no preview appears | Check that another process is not using the camera and that the platform camera runtime matches the board image. |
 | Capture or video save fails | Check `ffmpeg -version`, output-directory permissions, free disk space, and `CAMERA_FFMPEG`. |
 
 Some images provide `rpicam-hello` instead of `libcamera-hello` for camera
@@ -313,6 +353,38 @@ IMX219 overlay.
 ## Acknowledgments
 
 This app uses [LILYGO UI AppKit](https://github.com/LILYGO-UI/cm0-appkit),
-[LVGL](https://lvgl.io/), [libcamera](https://libcamera.org/), and
-[FFmpeg](https://ffmpeg.org/). The project package metadata declares the MIT
-license.
+[LVGL](https://lvgl.io/), the CM0 [libcamera](https://libcamera.org/) backend,
+the K230 V4L2/VVCAM backend, and [FFmpeg](https://ffmpeg.org/). The project
+package metadata declares the MIT license.
+
+## K230 Debian packages
+
+K230 uses the `riscv64` architecture and the `k230-debian` preset. The default
+SDK is the pinned `third_party/cm0-appkit`; initialize its submodules and use
+an AppKit revision that provides `cmake/k230-debian-toolchain.cmake`.
+
+Prepare a Debian riscv64 sysroot with the selected SDK's
+`tools/prepare-riscv64-sysroot.py`. Linux builds require
+`gcc-riscv64-linux-gnu` and `g++-riscv64-linux-gnu`; macOS builds require
+Homebrew LLVM, LLD and dpkg (`brew install llvm lld dpkg`). Buildroot sysroots are not
+compatible with this Debian target.
+
+For this multi-repository workspace, prepare the shared sysroot once and
+select the sibling SDK on the first configure:
+
+```sh
+python3 ../cm0-appkit/tools/prepare-riscv64-sysroot.py
+cmake --preset k230-debian -DLilyGoUI_DIR="$PWD/../cm0-appkit"
+lpm pack --arch riscv64
+```
+
+The SDK uses `../cm0-appkit/.cache/k230-debian/sysroot` by default. To use a
+different Debian sysroot, set `LILYGO_UI_DEBIAN_SYSROOT` or pass
+`-DLILYGO_UI_DEBIAN_SYSROOT=/path/to/sysroot` while configuring. Set
+`LILYGO_UI_APPKIT_DIR` before the first configure to select another SDK, or
+use `-DLilyGoUI_DIR=...` to update the cached selection. Subsequent
+`lpm pack --arch riscv64` commands reuse that SDK and write a riscv64 Debian
+package to `dist/`. ARM64 remains available with `lpm pack --arch arm64`.
+
+Run `lpm set-target k230` once to save K230 as the default target, then use
+`lpm pack` directly.

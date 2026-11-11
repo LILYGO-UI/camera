@@ -1,5 +1,6 @@
 #include "pages/camera/frame_transform.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 
@@ -139,6 +140,95 @@ bool transform_bgr(const Source &source, const Orientation &orientation, int out
                 if (remainder >= output_width) {
                     remainder -= output_width;
                     offset += pixel_step;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool transform_nv_to_bgr(const NvSource &source, int display_rotation, int zoom, int output_width,
+                         int output_height, std::vector<std::uint8_t> &output)
+{
+    if (!source.data || source.width < 2 || source.height < 2 || source.width % 2 ||
+        (source.nv12 && source.height % 2) || !valid_rotation(display_rotation) || (zoom != 1 && zoom != 2) ||
+        output_width <= 0 || output_height <= 0)
+        return false;
+
+    constexpr auto limit = static_cast<std::size_t>(std::numeric_limits<std::ptrdiff_t>::max());
+    const auto row_bytes = static_cast<std::size_t>(source.width);
+    const auto chroma_rows = static_cast<std::size_t>(source.nv12 ? source.height / 2 : source.height);
+    const auto rows = static_cast<std::size_t>(source.height) + chroma_rows;
+    // Luma includes padding through the start of the chroma plane. Only the
+    // final chroma row may omit its trailing padding.
+    if (row_bytes > limit || source.stride < row_bytes || source.stride > limit ||
+        rows - 1 > (limit - row_bytes) / source.stride)
+        return false;
+    const auto required = (rows - 1) * source.stride + row_bytes;
+    if (source.size < required || static_cast<std::size_t>(output_width) > output.max_size() / 3)
+        return false;
+    const auto output_row_bytes = static_cast<std::size_t>(output_width) * 3;
+    if (static_cast<std::size_t>(output_height) > output.max_size() / output_row_bytes)
+        return false;
+
+    if (output.capacity() != 0) {
+        const auto source_address = reinterpret_cast<std::uintptr_t>(source.data);
+        const auto output_address = reinterpret_cast<std::uintptr_t>(output.data());
+        if ((source_address >= output_address && source_address - output_address < output.capacity()) ||
+            (output_address >= source_address && output_address - source_address < required))
+            return false;
+    }
+
+    // Preserve the existing K230 crop rounding before mapping output pixels.
+    int crop_width = std::max(2, source.width / zoom);
+    int crop_height = std::max(2, source.height / zoom);
+    const int crop_x = ((source.width - crop_width) / 2) & ~1;
+    int crop_y = (source.height - crop_height) / 2;
+    crop_width &= ~1;
+    if (source.nv12) {
+        crop_y &= ~1;
+        crop_height &= ~1;
+    }
+    const int display_width = display_rotation % 180 ? crop_height : crop_width;
+    const int display_height = display_rotation % 180 ? crop_width : crop_height;
+    const auto map_point = [&](Point point) {
+        return rotate(point, display_width, display_height, (360 - display_rotation) % 360);
+    };
+    const Point origin = map_point({0, 0});
+    const Point next_x = map_point({1, 0});
+    const Point next_y = map_point({0, 1});
+    const Point step_x{next_x.x - origin.x, next_x.y - origin.y};
+    const Point step_y{next_y.x - origin.x, next_y.y - origin.y};
+    const int sample_step = display_width / output_width;
+    const int sample_remainder = display_width % output_width;
+    const auto chroma_base = static_cast<std::size_t>(source.height) * source.stride;
+    output.resize(output_row_bytes * static_cast<std::size_t>(output_height));
+
+    for (int y = 0; y < output_height; ++y) {
+        const int sample_y = static_cast<int>(static_cast<std::int64_t>(y) * display_height / output_height);
+        int source_x = crop_x + origin.x + step_y.x * sample_y;
+        int source_y = crop_y + origin.y + step_y.y * sample_y;
+        auto *destination = output.data() + static_cast<std::size_t>(y) * output_row_bytes;
+        std::int64_t remainder = 0;
+        for (int x = 0; x < output_width; ++x) {
+            const auto luma_offset = static_cast<std::size_t>(source_y) * source.stride + source_x;
+            const auto chroma_y = static_cast<std::size_t>(source.nv12 ? source_y / 2 : source_y);
+            const auto chroma_offset = chroma_base + chroma_y * source.stride + (source_x & ~1);
+            const int c = static_cast<int>(source.data[luma_offset]) - 16;
+            const int d = static_cast<int>(source.data[chroma_offset]) - 128;
+            const int e = static_cast<int>(source.data[chroma_offset + 1]) - 128;
+            destination[0] = static_cast<std::uint8_t>(std::clamp((298 * c + 516 * d + 128) >> 8, 0, 255));
+            destination[1] = static_cast<std::uint8_t>(std::clamp((298 * c - 100 * d - 208 * e + 128) >> 8, 0, 255));
+            destination[2] = static_cast<std::uint8_t>(std::clamp((298 * c + 409 * e + 128) >> 8, 0, 255));
+            destination += 3;
+            if (x + 1 < output_width) {
+                source_x += step_x.x * sample_step;
+                source_y += step_x.y * sample_step;
+                remainder += sample_remainder;
+                if (remainder >= output_width) {
+                    remainder -= output_width;
+                    source_x += step_x.x;
+                    source_y += step_x.y;
                 }
             }
         }

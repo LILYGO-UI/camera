@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.21)
 include(cmake/LpmMetadata.cmake)
 project(${LILYGO_UI_CMAKE_PROJECT_NAME} LANGUAGES C CXX)
 
-# Device packages must resolve libcamera from the target image. Do not embed
-# the host-side sysroot or temporary development prefix in the ELF RPATH.
+# Device packages resolve camera support from the target image. Do not embed
+# a host-side sysroot or temporary development prefix in the ELF RPATH.
 if(CMAKE_CROSSCOMPILING)
     set(CMAKE_SKIP_RPATH ON)
 endif()
@@ -12,16 +12,23 @@ endif()
 include(GNUInstallDirs)
 include(CTest)
 # Match the 50 Hz panel in LVGL, the statically linked SDK, and this application.
-add_compile_definitions(LV_DEF_REFR_PERIOD=20)
+if(NOT LILYGO_UI_PLATFORM STREQUAL "k230")
+    add_compile_definitions(LV_DEF_REFR_PERIOD=20)
+endif()
 find_package(LilyGoUI CONFIG REQUIRED)
 find_package(Threads REQUIRED)
-set(LIBCAMERA_DEBIAN_PACKAGE "libcamera0.7" CACHE STRING
-    "Debian package matching the libcamera ABI linked by the CM0 BSP")
-set(LIBCAMERA_PINNED_VERSION "0.7.2+rpt20261009-1" CACHE STRING
-    "libcamera version pinned by the target CM0 image runtime and development files")
+if(NOT LILYGO_UI_PLATFORM STREQUAL "k230")
+    set(_libcamera_default_package "libcamera0.7")
+    set(_libcamera_default_version "0.7.2+rpt20261009-1")
+    set(LIBCAMERA_DEBIAN_PACKAGE "${_libcamera_default_package}" CACHE STRING
+        "Debian package matching the libcamera ABI linked by the target image")
+    set(LIBCAMERA_PINNED_VERSION "${_libcamera_default_version}" CACHE STRING
+        "libcamera version matching the target image runtime and development files")
+endif()
 
-# The host simulator keeps its synthetic backend and does not need libcamera.
-if(NOT CM0_SIMULATOR)
+# K230 exposes the GC2093 through the BSP's V4L2/ISP media pipeline. It must
+# not pull libcamera headers or packages into the RISC-V application.
+if(NOT CM0_SIMULATOR AND NOT LILYGO_UI_PLATFORM STREQUAL "k230")
     include(cmake/Libcamera.cmake)
 endif()
 
@@ -42,15 +49,23 @@ target_compile_options(lilygo_ui_camera_core PRIVATE
     -Wall -Wextra -Wpedantic)
 target_compile_features(lilygo_ui_camera_core PUBLIC cxx_std_20)
 target_link_libraries(lilygo_ui_camera_core PUBLIC Threads::Threads)
-if(NOT CM0_SIMULATOR)
+target_link_libraries(lilygo_ui_camera_core PUBLIC LilyGoUI::Runtime)
+if(NOT CM0_SIMULATOR AND NOT LILYGO_UI_PLATFORM STREQUAL "k230")
     target_include_directories(lilygo_ui_camera_core PRIVATE
         "${LIBCAMERA_INCLUDE_DIR}")
     target_link_libraries(lilygo_ui_camera_core PUBLIC
         "${LIBCAMERA_LIBRARY}"
         "${LIBCAMERA_BASE_LIBRARY}")
     target_compile_definitions(lilygo_ui_camera_core PRIVATE CAMERA_HAS_LIBCAMERA=1)
+    target_compile_definitions(lilygo_ui_camera_core PRIVATE CAMERA_HAS_K230=0)
+elseif(NOT CM0_SIMULATOR AND LILYGO_UI_PLATFORM STREQUAL "k230")
+    target_compile_definitions(lilygo_ui_camera_core PRIVATE
+        CAMERA_HAS_LIBCAMERA=0
+        CAMERA_HAS_K230=1)
 else()
-    target_compile_definitions(lilygo_ui_camera_core PRIVATE CAMERA_HAS_LIBCAMERA=0)
+    target_compile_definitions(lilygo_ui_camera_core PRIVATE
+        CAMERA_HAS_LIBCAMERA=0
+        CAMERA_HAS_K230=0)
 endif()
 if(CM0_SIMULATOR)
     target_compile_definitions(lilygo_ui_camera_core PRIVATE CAMERA_DEFAULT_SIMULATED=1)
@@ -184,12 +199,27 @@ set(CPACK_SET_DESTDIR ON)
 set(CPACK_COMPONENTS_ALL app)
 set(CPACK_DEBIAN_APP_PACKAGE_NAME "${LILYGO_UI_PACKAGE_NAME}")
 set(CPACK_DEBIAN_APP_FILE_NAME DEB-DEFAULT)
-set(CPACK_DEBIAN_APP_PACKAGE_DEPENDS
-    "libc6, libstdc++6, libdrm2, libfreetype6, ${LIBCAMERA_DEBIAN_PACKAGE} (= ${LIBCAMERA_PINNED_VERSION}), libcamera-ipa (= ${LIBCAMERA_PINNED_VERSION}), ffmpeg, lilygo-ui-appkit-dev (>= ${LILYGO_UI_MIN_APPKIT_VERSION})")
+if(LILYGO_UI_PLATFORM STREQUAL "k230")
+    set(_camera_runtime_dependencies
+        "libc6, libstdc++6, libdrm2, libfreetype6, ffmpeg, lilygo-ui-appkit-dev (>= ${LILYGO_UI_MIN_APPKIT_VERSION})")
+else()
+    set(_camera_runtime_dependencies
+        "libc6, libstdc++6, libdrm2, libfreetype6, ${LIBCAMERA_DEBIAN_PACKAGE} (= ${LIBCAMERA_PINNED_VERSION}), libcamera-ipa (= ${LIBCAMERA_PINNED_VERSION}), ffmpeg, lilygo-ui-appkit-dev (>= ${LILYGO_UI_MIN_APPKIT_VERSION})")
+endif()
+set(CPACK_DEBIAN_APP_PACKAGE_DEPENDS "${_camera_runtime_dependencies}")
 set(CPACK_DEBIAN_APP_PACKAGE_SECTION "utils")
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
-if(CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
-    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE
-        "${LILYGO_UI_PACKAGE_ARCHITECTURE}")
+if(LILYGO_UI_DEBIAN_ARCHITECTURE)
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${LILYGO_UI_DEBIAN_ARCHITECTURE}")
+elseif(CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "arm64")
+endif()
+if("DEB" IN_LIST CPACK_GENERATOR AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if(NOT COMMAND lilygo_ui_enable_debian_dependencies)
+        message(FATAL_ERROR
+            "Debian packaging requires an AppKit SDK with automatic runtime dependency analysis. "
+            "Update the pinned AppKit or select a compatible SDK with "
+            "-DLilyGoUI_DIR=/path/to/cm0-appkit.")
+    endif()
+    lilygo_ui_enable_debian_dependencies()
 endif()
 include(CPack)

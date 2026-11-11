@@ -20,11 +20,12 @@ void app_open(const cm0_app_context_t *context)
     lv_obj_set_style_pad_hor(context->root, 0, 0);
     lv_obj_set_style_pad_bottom(context->root, 38, 0);
     lv_obj_set_style_bg_color(context->root, lv_color_hex(0x000000), 0);
-    // The CM0 camera needs a further 90-degree counterclockwise correction
-    // relative to the portrait panel after libcamera handles the sensor mount.
-    // SDL's synthetic scene has no physical mounting offset.
+    // The physical mount differs between the CM0 libcamera path and the K230
+    // GC2093 V4L2 path. SDL's synthetic scene has no physical mounting offset.
 #if defined(CM0_APP_SIMULATOR)
     constexpr int camera_mount_rotation = 0;
+#elif defined(LILYGO_UI_PLATFORM_K230) && LILYGO_UI_PLATFORM_K230
+    constexpr int camera_mount_rotation = 90;
 #else
     constexpr int camera_mount_rotation = 270;
 #endif

@@ -2,9 +2,9 @@
 
 [English](README.md) | **简体中文**
 
-LILYGO 相机是一款面向 T-DisplayCM0 及其 Sony IMX219 摄像头的本地相机应用，使用
-C++17、[LILYGO UI AppKit](https://github.com/LILYGO-UI/cm0-appkit)、LVGL 和
-libcamera C++ API 构建。界面支持竖屏和横屏，并将照片与视频保存在设备本地。
+LILYGO 相机是一款面向 T-DisplayCM0 和 T-Display-K230 的本地相机应用，使用
+C++17、[LILYGO UI AppKit](https://github.com/LILYGO-UI/cm0-appkit)、LVGL 和平台相机后端
+构建。界面支持竖屏和横屏，并将照片与视频保存在设备本地。
 
 项目提供用于开发和测试的 SDL2 桌面模拟器，以及面向 CM0 设备的 AArch64 Linux 安装包。
 
@@ -47,7 +47,31 @@ libcamera 处理。相机相对竖屏面板还安装了逆时针 90°；应用�
 SDL 模拟图案不应用物理安装偏角。
 
 规格表示请求的采集和编码设置，不代表硬件一定能达到目标性能。尤其是 `720P · 60`，
-其可用性取决于 CM0 镜像、传感器模式、libcamera 管线和编码器。请在目标设备上验证实际采集帧率和输出。
+其可用性取决于镜像、传感器模式、相机管线和编码器。请在目标设备上验证实际采集帧率和输出。
+
+T-Display-K230 使用不同的相机栈：
+
+| 部件 | 配置 |
+| --- | --- |
+| 图像传感器 | GalaxyCore GC2093，I2C0 地址 `0x37` |
+| 摄像头接口 | 通过 BSP VVCAM 管线连接 CSI2/MIPI0 |
+| 采集节点 | 优先使用 VVCAM SP2（`vvcam-video.*.2`），其他 NV16/NV12 节点作为回退（可用 `CAMERA_K230_DEVICE` 覆盖） |
+| 像素格式 | NV16（回退到 NV12） |
+| 传感器采集 | 固定 `1920×1080`；预览和 720P 媒体由软件采样缩放 |
+| ISP 启动 | `/usr/bin/isp_media_server`，环境变量 `ISP_MEDIA_SENSOR_DRIVER=/usr/lib/libvvcam.so` |
+
+K230 后端会启动或复用 `isp_media_server`，扫描支持 NV16/NV12 的 V4L2 采集节点，按 sysfs 名称优先选择 SP2 缩放输出，并把帧转换为
+应用使用的 BGR 取景格式。它不使用 libcamera 或 CM0 的 IMX219 路径。打开相机前请先停止板上的
+RTSP 推流，因为两者共用同一条 ISP 管线。板卡和驱动配置参见
+[T-Display-K230 官方仓库](https://github.com/Xinyuan-LilyGO/T-Display-K230)。
+
+v0.2.9 的 ISP 从 1080P 切回 720P 时会出现行和色度错位，SP2 也会受影响。
+K230 因此固定使用原生 1080P 采集，切换画质时保持同一采集队列运行，仅改变软件输出尺寸
+和编码节拍。普通预览只转换输出所需的像素，避免每帧先转换整张 1080P 图像。
+60 fps 档位不会配置或保证传感器每秒输出 60 个独立帧。采集中不要用另一个进程查询同一
+设备节点：此 BSP 在额外句柄关闭时可能销毁正在使用的共享管线。
+应用会复用运行中的 ISP 服务，不会终止它。启用 `CONFIG_RT_GROUP_SCHED` 和 cgroup v2 的
+Debian 镜像需要 canaan-gen 在 `BSP_CAMERA_RUNTIME=1` 时安装的 ISP 线程兼容库。
 
 ## 开发环境搭建
 
@@ -236,7 +260,8 @@ CAMERA_SIMULATE=0 /usr/bin/lilygo-ui-camera --display drm \
 | 环境变量 | 用途 |
 | --- | --- |
 | `CAMERA_SIMULATE=1` | 使用模拟取景和模拟拍摄后端。 |
-| `CAMERA_SIMULATE=0` | 使用真实 libcamera 后端；设备构建默认如此。 |
+| `CAMERA_SIMULATE=0` | 使用真实平台后端；设备构建默认如此。 |
+| `CAMERA_K230_DEVICE` | 覆盖 K230 V4L2 采集节点；未设置时自动扫描 `/dev/video*`，按 sysfs 名称优先选择 VVCAM SP2，再尝试其他支持 NV16/NV12 的采集节点。 |
 | `CAMERA_OUTPUT_DIR` | 覆盖拍摄文件目录。 |
 | `CAMERA_FFMPEG` | 指定 FFmpeg 可执行文件；默认从 `PATH` 查找。 |
 | `CAMERA_VIDEO_CODEC` | 选择 `auto`（默认）、`hardware` 或 `software` H.264 编码。 |
@@ -252,9 +277,10 @@ CAMERA_SIMULATE=0 /usr/bin/lilygo-ui-camera --display drm \
 | `lpm is required to read project metadata` | 激活 `.venv`、安装 LPM，或设置 `LPM_EXECUTABLE`。 |
 | 找不到 AppKit 或 LVGL 源码 | 执行 `git submodule update --init --recursive`。 |
 | 找不到 SDL2 或 FreeType | 安装主机开发依赖；macOS 上检查 Homebrew 路径。 |
-| 无法下载/找到 BSP 或 libcamera 开发文件 | 检查网络和磁盘空间，或通过 `LIBCAMERA_DEV_ROOT` 指定匹配的目标文件。 |
-| 未检测到 IMX219 | 检查摄像头排线、板卡 overlay、I2C0 引脚配置和内核相机探测日志。 |
-| 已检测到摄像头但没有取景 | 确认没有其他进程占用摄像头，并确认 `libcamera-ipa` 与 `libcamera0.7` 版本匹配。 |
+| 无法下载/找到 BSP 或 libcamera 开发文件 | 检查网络和磁盘空间；CM0 构建可通过 `LIBCAMERA_DEV_ROOT` 指定匹配的目标文件。 |
+| 未检测到 IMX219 | 在 CM0 上检查摄像头排线、板卡 overlay、I2C0 引脚配置和内核相机探测日志。 |
+| K230 相机管线不可用 | 停止 RTSP，确认 `isp_media_server` 和 `/usr/lib/libvvcam.so`，检查 `/tmp/isp.err.log`，并用 `v4l2-ctl --list-devices`/`--list-formats-ext` 查找提供 NV16 或 NV12 的节点。 |
+| 已检测到摄像头但没有取景 | 确认没有其他进程占用摄像头，并确认平台相机运行时与板卡镜像匹配。 |
 | 拍摄或录像保存失败 | 检查 `ffmpeg -version`、输出目录权限、剩余空间和 `CAMERA_FFMPEG`。 |
 
 部分系统使用 `rpicam-hello` 而不是 `libcamera-hello` 进行摄像头排查。这些工具是可选的；应用直接使用
@@ -271,5 +297,34 @@ libcamera 库。板卡 overlay 要求按说明配置 `i2c0,pins_44_45`；请遵�
 ## 致谢
 
 本应用使用 [LILYGO UI AppKit](https://github.com/LILYGO-UI/cm0-appkit)、
-[LVGL](https://lvgl.io/)、[libcamera](https://libcamera.org/) 和
-[FFmpeg](https://ffmpeg.org/)。项目软件包元数据声明使用 MIT 许可证。
+[LVGL](https://lvgl.io/)、CM0 的 [libcamera](https://libcamera.org/) 后端、
+K230 的 V4L2/VVCAM 后端和 [FFmpeg](https://ffmpeg.org/)。项目软件包元数据声明使用 MIT 许可证。
+
+## K230 Debian 打包
+
+K230 使用 `riscv64` 架构和 `k230-debian` preset。默认 SDK 为固定版本的
+`third_party/cm0-appkit`；请初始化子模块，并确保 AppKit 版本包含
+`cmake/k230-debian-toolchain.cmake`。
+
+使用所选 SDK 的 `tools/prepare-riscv64-sysroot.py` 准备 Debian riscv64
+sysroot。Linux 需要 `gcc-riscv64-linux-gnu` 和 `g++-riscv64-linux-gnu`；
+macOS 需要 Homebrew LLVM、LLD 和 dpkg（`brew install llvm lld dpkg`）。此 Debian
+目标不能使用 Buildroot sysroot。
+
+在当前多仓库工作区中，只需准备一次共享 sysroot，并在首次配置时选择同级 SDK：
+
+```sh
+python3 ../cm0-appkit/tools/prepare-riscv64-sysroot.py
+cmake --preset k230-debian -DLilyGoUI_DIR="$PWD/../cm0-appkit"
+lpm pack --arch riscv64
+```
+
+SDK 默认使用 `../cm0-appkit/.cache/k230-debian/sysroot`。如需其他 Debian
+sysroot，可设置 `LILYGO_UI_DEBIAN_SYSROOT` 环境变量，或在配置时传入
+`-DLILYGO_UI_DEBIAN_SYSROOT=/path/to/sysroot`。首次配置前也可通过
+`LILYGO_UI_APPKIT_DIR` 选择 SDK；修改已缓存的选择请使用
+`-DLilyGoUI_DIR=...`。后续 `lpm pack --arch riscv64` 会沿用该 SDK，
+并将 riscv64 Debian 安装包写入 `dist/`。ARM64 仍可通过
+`lpm pack --arch arm64` 构建。
+
+执行一次 `lpm set-target k230` 保存 K230 为默认目标，后续直接运行 `lpm pack`。

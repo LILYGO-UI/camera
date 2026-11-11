@@ -170,6 +170,182 @@ void check_invalid_inputs()
     for (std::size_t index = 0; index < output.size(); ++index) assert(output[index] == bytes[index % 3]);
 }
 
+std::vector<std::uint8_t> nv_pixels(int width, int height, std::size_t stride, bool nv12)
+{
+    const auto chroma_base = stride * height;
+    const int chroma_rows = nv12 ? height / 2 : height;
+    // Include the complete luma plane but omit the last chroma row's padding.
+    std::vector<std::uint8_t> result(chroma_base + stride * (chroma_rows - 1) + width, 0xcd);
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+            result[static_cast<std::size_t>(y) * stride + x] = static_cast<std::uint8_t>(16 + (x * 17 + y * 19) % 220);
+    for (int y = 0; y < chroma_rows; ++y)
+        for (int x = 0; x < width; x += 2) {
+            const auto at = chroma_base + static_cast<std::size_t>(y) * stride + x;
+            result[at] = static_cast<std::uint8_t>(32 + (x * 13 + y * 29) % 192);
+            result[at + 1] = static_cast<std::uint8_t>(32 + (x * 31 + y * 11) % 192);
+        }
+    return result;
+}
+
+// Keep the former two-stage behavior as an independent mapping reference:
+// materialise every cropped NV pixel, rotate that BGR image, then resize it.
+Image reference_nv(const camera_frame::NvSource &source, int rotation, int zoom)
+{
+    int width = std::max(2, source.width / zoom);
+    int height = std::max(2, source.height / zoom);
+    const int left = ((source.width - width) / 2) & ~1;
+    int top = (source.height - height) / 2;
+    width &= ~1;
+    if (source.nv12) top &= ~1, height &= ~1;
+    Image image{width, height, std::vector<std::uint8_t>(static_cast<std::size_t>(width) * height * 3)};
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x) {
+            const int source_x = left + x, source_y = top + y;
+            const auto uv = static_cast<std::size_t>(source.height) * source.stride +
+                            static_cast<std::size_t>(source.nv12 ? source_y / 2 : source_y) * source.stride +
+                            (source_x / 2) * 2;
+            const int yy = source.data[static_cast<std::size_t>(source_y) * source.stride + source_x] - 16;
+            const int u = source.data[uv] - 128, v = source.data[uv + 1] - 128;
+            const int channels[]{(298 * yy + 516 * u + 128) >> 8,
+                                 (298 * yy - 100 * u - 208 * v + 128) >> 8,
+                                 (298 * yy + 409 * v + 128) >> 8};
+            for (int channel = 0; channel < 3; ++channel)
+                image.bytes[(static_cast<std::size_t>(y) * width + x) * 3 + channel] =
+                    static_cast<std::uint8_t>(std::clamp(channels[channel], 0, 255));
+        }
+    return rotate_clockwise(std::move(image), rotation);
+}
+
+void check_nv_colors_and_chroma_rows()
+{
+    // Known limited-range black, white, red, green and blue Y/U/V triplets.
+    constexpr int colors[][6]{{16, 128, 128, 0, 0, 0}, {235, 128, 128, 255, 255, 255},
+                              {81, 90, 240, 0, 0, 255}, {145, 54, 34, 1, 255, 0},
+                              {41, 240, 110, 255, 0, 0}};
+    for (const bool nv12 : {false, true}) {
+        constexpr int width = 10, height = 4, stride = 14;
+        auto bytes = nv_pixels(width, height, stride, nv12);
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x) {
+                const int chroma_y = nv12 ? y / 2 : y;
+                const auto &color = colors[(x / 2 + chroma_y) % 5];
+                bytes[y * stride + x] = color[0];
+                bytes[height * stride + chroma_y * stride + (x & ~1)] = color[1];
+                bytes[height * stride + chroma_y * stride + (x & ~1) + 1] = color[2];
+            }
+        const camera_frame::NvSource source{bytes.data(), bytes.size(), width, height, stride, nv12};
+        std::vector<std::uint8_t> output;
+        assert(camera_frame::transform_nv_to_bgr(source, 0, 1, width, height, output));
+        for (int y = 0; y < height; ++y)
+            for (int x = 0; x < width; ++x)
+                for (int channel = 0; channel < 3; ++channel)
+                    assert(output[(y * width + x) * 3 + channel] ==
+                           colors[(x / 2 + (nv12 ? y / 2 : y)) % 5][channel + 3]);
+    }
+}
+
+void check_nv_orientation_crop_and_resize()
+{
+    for (const bool nv12 : {false, true})
+        for (const auto &dimensions : {std::pair<int, int>{8, 6}, {10, 6}, {2, 2}, {6, 5}}) {
+            if (nv12 && dimensions.second % 2) continue;
+            for (const int padding : {0, 7}) {
+                const std::size_t stride = dimensions.first + padding;
+                const auto bytes = nv_pixels(dimensions.first, dimensions.second, stride, nv12);
+                const camera_frame::NvSource source{bytes.data(), bytes.size(), dimensions.first,
+                                                     dimensions.second, stride, nv12};
+                for (const int zoom : {1, 2})
+                    for (const int rotation : {0, 90, 180, 270}) {
+                        const auto expected = reference_nv(source, rotation, zoom);
+                        std::vector<std::uint8_t> output;
+                        assert(camera_frame::transform_nv_to_bgr(source, rotation, zoom, expected.width,
+                                                                 expected.height, output));
+                        assert(output == expected.bytes);
+                        for (const auto &size : {std::pair<int, int>{1, 1}, {3, 5}, {11, 9}}) {
+                            assert(camera_frame::transform_nv_to_bgr(source, rotation, zoom, size.first,
+                                                                     size.second, output));
+                            assert(output == resize(expected, size.first, size.second));
+                        }
+                    }
+            }
+        }
+
+    // Exercise fixed 1080P capture with portrait preview/export sizes and reuse
+    // the output allocation when switching between those smaller requests.
+    for (const bool nv12 : {false, true}) {
+        const auto bytes = nv_pixels(1920, 1080, 1952, nv12);
+        const camera_frame::NvSource source{bytes.data(), bytes.size(), 1920, 1080, 1952, nv12};
+        const auto expected = reference_nv(source, 90, 2);
+        std::vector<std::uint8_t> output;
+        assert(camera_frame::transform_nv_to_bgr(source, 90, 2, 720, 1280, output));
+        assert(output == resize(expected, 720, 1280));
+        const auto *allocation = output.data();
+        assert(camera_frame::transform_nv_to_bgr(source, 90, 2, 360, 640, output));
+        assert(output == resize(expected, 360, 640) && output.data() == allocation);
+    }
+}
+
+void check_nv_invalid_inputs()
+{
+    for (const bool nv12 : {false, true}) {
+        const auto bytes = nv_pixels(8, 6, 11, nv12);
+        const camera_frame::NvSource valid{bytes.data(), bytes.size(), 8, 6, 11, nv12};
+        const std::vector<std::uint8_t> untouched{1, 2, 3};
+        std::vector<std::uint8_t> output = untouched;
+        const auto rejects = [&](camera_frame::NvSource source, int rotation = 0, int zoom = 1,
+                                 int width = 8, int height = 6) {
+            assert(!camera_frame::transform_nv_to_bgr(source, rotation, zoom, width, height, output));
+            assert(output == untouched);
+        };
+        auto source = valid;
+        source.data = nullptr;
+        rejects(source);
+        source = valid;
+        source.size--;
+        rejects(source);
+        source = valid;
+        source.size = source.stride * source.height; // Luma alone is not a complete NV frame.
+        rejects(source);
+        for (const int width : {-1, 0, 1, 7}) {
+            source = valid;
+            source.width = width;
+            rejects(source);
+        }
+        for (const int height : {-1, 0, 1}) {
+            source = valid;
+            source.height = height;
+            rejects(source);
+        }
+        if (nv12) {
+            source = valid;
+            source.height = 5;
+            rejects(source);
+        }
+        source = valid;
+        source.stride = 7;
+        rejects(source);
+        source.stride = std::numeric_limits<std::size_t>::max();
+        rejects(source);
+        source.stride = static_cast<std::size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / 2;
+        rejects(source);
+        rejects(valid, 45);
+        rejects(valid, -90);
+        rejects(valid, 0, 0);
+        rejects(valid, 0, 3);
+        rejects(valid, 0, 1, 0);
+        rejects(valid, 0, 1, 8, -1);
+        rejects(valid, 0, 1, std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
+    }
+    std::vector<std::uint8_t> alias(64, 0x80);
+    const auto untouched = alias;
+    for (const int offset : {0, 2}) {
+        const camera_frame::NvSource source{alias.data() + offset, alias.size() - offset, 4, 4, 4, false};
+        assert(!camera_frame::transform_nv_to_bgr(source, 90, 2, 8, 8, alias));
+        assert(alias == untouched);
+    }
+}
+
 }  // namespace
 
 int main()
@@ -177,5 +353,8 @@ int main()
     check_all_orientations();
     check_preview_and_export();
     check_invalid_inputs();
-    std::cout << "fused frame transform orientation, stride, preview and bounds tests passed\n";
+    check_nv_colors_and_chroma_rows();
+    check_nv_orientation_crop_and_resize();
+    check_nv_invalid_inputs();
+    std::cout << "fused BGR/NV frame transform colors, orientation, crop, stride, preview and bounds tests passed\n";
 }
