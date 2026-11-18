@@ -241,11 +241,11 @@ lpm pack
 The first device configuration downloads and verifies CM0 BSP `0.1.0` and caches
 its sysroot in `.cache/cm0-bsp/0.1.0`. The BSP runtime is older than the target
 image runtime, so the device build must use a matching target development root
-containing the `0.7.2+rpt20261009-1` headers and libraries:
+containing the `0.8.0+rpt20261104-1` headers and libraries:
 
 ```sh
-cmake --preset cm0-cross \
-  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.7.2+rpt20261009-1
+cmake --fresh --preset cm0-cross \
+  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.8.0+rpt20261104-1
 lpm pack --preset cm0-cross
 ```
 
@@ -254,7 +254,29 @@ during CMake configuration with
 `-DLIBCAMERA_DEV_ROOT=/path/to/libcamera-dev`. The directory may contain
 `usr/include` and `usr/lib`, or directly `include` and `lib`. A custom BSP or
 libcamera ABI must also supply matching target libraries and set
-`LIBCAMERA_DEBIAN_PACKAGE` to the runtime package name on the device.
+`LIBCAMERA_DEBIAN_PACKAGE` and `LIBCAMERA_PINNED_VERSION` to the matching
+runtime package name and Debian version. Use a fresh build directory (or
+`--fresh` with CMake 3.24+) when upgrading: an existing CMake cache can retain
+the old headers, library paths, and dependency version.
+
+On an ARM64 Raspberry Pi OS trixie build host with the Raspberry Pi and LILYGO
+APT repositories configured, the package can also be built against the native
+development libraries, without the older BSP sysroot:
+
+```sh
+sudo apt update
+sudo apt install build-essential cmake pkg-config libdrm-dev libfreetype6-dev \
+  libcamera-dev=0.8.0+rpt20261104-1 libcamera0.8=0.8.0+rpt20261104-1 \
+  libcamera-ipa=0.8.0+rpt20261104-1
+cmake -S . -B build/cm0-native \
+  -DLilyGoUI_DIR="$PWD/third_party/cm0-appkit" \
+  -DCM0_SIMULATOR=OFF -DBUILD_TESTING=OFF \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build/cm0-native --parallel
+cpack --config build/cm0-native/CPackConfig.cmake -B dist
+```
+
+This requires `lpm` and the initialized AppKit submodule, as above.
 
 K230 builds use the BSP camera path directly: the application starts
 `isp_media_server` with `ISP_MEDIA_SENSOR_DRIVER=/usr/lib/libvvcam.so`, then
@@ -264,7 +286,7 @@ or runtime packages. The camera service must expose the GC2093 node and the
 application user must have access to the selected video node; set
 `CAMERA_K230_DEVICE` when a fixed node is required.
 
-The package is written to `dist/lilygo-ui-camera_0.1.1_arm64.deb`. It depends on
+The package is written to `dist/lilygo-ui-camera_0.1.3_arm64.deb`. It depends on
 `lilygo-ui-appkit-dev >= 0.1.0` for the shared runtime fonts as well as the
 camera and media libraries. Make sure the AppKit package is available from the
 device's configured package sources. On the CM0 Raspberry Pi OS image, install
@@ -272,9 +294,15 @@ the runtime dependencies and package:
 
 ```sh
 sudo apt update
-sudo apt install libcamera0.7 libcamera-ipa ffmpeg
-sudo apt install ./lilygo-ui-camera_0.1.1_arm64.deb
+sudo apt install ./lilygo-ui-camera_0.1.3_arm64.deb
 ```
+
+Version `0.1.3` requires `libcamera0.8` and `libcamera-ipa` at
+`0.8.0+rpt20261104-1`; APT installs these dependencies together. The binary must
+be rebuilt for this ABI: changing only the dependency names of an older DEB
+does not make its libcamera 0.7 binary compatible. Publish the new ARM64 package
+to the signed LILYGO APT repository before restarting pi-gen; its stage2 and
+stage5 installers already refresh the repository metadata.
 
 Launch **Camera** from the app launcher. To run it directly, the user needs
 camera, DRM, and input-device access, and no other process may own the camera

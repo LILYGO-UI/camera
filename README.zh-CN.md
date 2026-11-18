@@ -207,28 +207,52 @@ lpm pack
 
 首次配置设备构建时会下载并校验 CM0 BSP `0.1.0`，并将 sysroot 缓存到
 `.cache/cm0-bsp/0.1.0`。当前 BSP 中的运行库版本较旧，设备构建必须通过
-`LIBCAMERA_DEV_ROOT` 指向与目标镜像一致、同时包含 `0.7.2+rpt20261009-1` 头文件和库的目录：
+`LIBCAMERA_DEV_ROOT` 指向与目标镜像一致、同时包含 `0.8.0+rpt20261104-1` 头文件和库的目录：
 
 ```sh
-cmake --preset cm0-cross \
-  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.7.2+rpt20261009-1
+cmake --fresh --preset cm0-cross \
+  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.8.0+rpt20261104-1
 lpm pack --preset cm0-cross
 ```
 
 如果已有匹配的 libcamera 开发文件，可在 CMake 配置时通过
 `-DLIBCAMERA_DEV_ROOT=/path/to/libcamera-dev` 指定根目录。目录可包含
 `usr/include` 和 `usr/lib`，也可直接包含 `include` 与 `lib`。自定义 BSP 或 libcamera ABI
-还必须提供匹配的目标库，并通过 `LIBCAMERA_DEBIAN_PACKAGE` 设置设备上的运行时软件包名。
+还必须提供匹配的目标库，并通过 `LIBCAMERA_DEBIAN_PACKAGE` 和 `LIBCAMERA_PINNED_VERSION`
+设置设备上的运行时软件包名和 Debian 版本。升级时使用新的构建目录，或使用 CMake 3.24+
+的 `--fresh`，避免旧缓存继续引用 0.7 的头文件、库路径和依赖版本。
 
-软件包输出到 `dist/lilygo-ui-camera_0.1.1_arm64.deb`。它依赖
+也可以在已配置 Raspberry Pi 和 LILYGO APT 软件源的 ARM64 Raspberry Pi OS trixie
+构建主机上，直接使用本机开发库打包，无需旧版 BSP sysroot：
+
+```sh
+sudo apt update
+sudo apt install build-essential cmake pkg-config libdrm-dev libfreetype6-dev \
+  libcamera-dev=0.8.0+rpt20261104-1 libcamera0.8=0.8.0+rpt20261104-1 \
+  libcamera-ipa=0.8.0+rpt20261104-1
+cmake -S . -B build/cm0-native \
+  -DLilyGoUI_DIR="$PWD/third_party/cm0-appkit" \
+  -DCM0_SIMULATOR=OFF -DBUILD_TESTING=OFF \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build/cm0-native --parallel
+cpack --config build/cm0-native/CPackConfig.cmake -B dist
+```
+
+此方式同样需要先安装 `lpm` 并初始化 AppKit 子模块。
+
+软件包输出到 `dist/lilygo-ui-camera_0.1.3_arm64.deb`。它依赖
 `lilygo-ui-appkit-dev >= 0.1.0` 提供共享运行时字体，并依赖相机和媒体库。
 请确保设备配置的软件源中包含 AppKit 软件包。在 CM0 Raspberry Pi OS 镜像上安装运行依赖和应用软件包：
 
 ```sh
 sudo apt update
-sudo apt install libcamera0.7 libcamera-ipa ffmpeg
-sudo apt install ./lilygo-ui-camera_0.1.1_arm64.deb
+sudo apt install ./lilygo-ui-camera_0.1.3_arm64.deb
 ```
+
+`0.1.3` 要求 `libcamera0.8` 和 `libcamera-ipa` 同为 `0.8.0+rpt20261104-1`，
+APT 会一并安装。必须用该版本的开发库重新编译，不能只修改旧 DEB 的依赖名称。
+重新运行 pi-gen 前，先把新的 ARM64 软件包发布到签名的 LILYGO APT 仓库；
+stage2 和 stage5 的安装脚本已经会刷新仓库索引。
 
 从应用启动器打开“相机”。如需直接运行，当前用户需要访问摄像头、DRM 和输入设备的权限，
 并确保没有其他进程占用摄像头或 DRM 显示：

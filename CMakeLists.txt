@@ -18,8 +18,8 @@ endif()
 find_package(LilyGoUI CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 if(NOT LILYGO_UI_PLATFORM STREQUAL "k230")
-    set(_libcamera_default_package "libcamera0.7")
-    set(_libcamera_default_version "0.7.2+rpt20261009-1")
+    set(_libcamera_default_package "libcamera0.8")
+    set(_libcamera_default_version "0.8.0+rpt20261104-1")
     set(LIBCAMERA_DEBIAN_PACKAGE "${_libcamera_default_package}" CACHE STRING
         "Debian package matching the libcamera ABI linked by the target image")
     set(LIBCAMERA_PINNED_VERSION "${_libcamera_default_version}" CACHE STRING
