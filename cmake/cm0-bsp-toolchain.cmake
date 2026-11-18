@@ -1,87 +1,122 @@
-set(CM0_BSP_VERSION "0.1.0")
-set(CM0_BSP_URL
-    "https://github.com/LILYGO-UI/CM0BspBuilder/releases/download/0.1.0/cm0_sdk.tar.gz"
-    CACHE STRING "URL of the CM0 BSP SDK archive")
-set(CM0_BSP_SHA256
-    "095b1e18e338ad297717f6454675081deff17997704c7460cd0fe8bdcef2a5ee"
-    CACHE STRING "SHA-256 checksum of the CM0 BSP SDK archive")
+# CM0 camera cross build. Build a complete, pinned target sysroot on macOS or
+# Linux; the older BSP release lacks libcamera-dev and Debian symbol metadata.
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+set(CM0_MULTIARCH "aarch64-linux-gnu" CACHE STRING "Target Debian multiarch tuple")
+get_filename_component(_camera_project_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(CM0_SYSROOT_CACHE_DIR "${_camera_project_root}/.cache/cm0-sysroot" CACHE PATH
+    "Cache for the camera's locked ARM64 development packages")
+set(CM0_SYSROOT "" CACHE PATH "Optional complete ARM64 sysroot with Debian package metadata")
 
-get_filename_component(_CM0_BSP_PROJECT_ROOT
-    "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-set(CM0_BSP_CACHE_DIR "${_CM0_BSP_PROJECT_ROOT}/.cache/cm0-bsp"
-    CACHE PATH "Directory used to cache downloaded CM0 BSP releases")
-
-set(_CM0_BSP_RELEASE_DIR "${CM0_BSP_CACHE_DIR}/${CM0_BSP_VERSION}")
-set(_CM0_BSP_ARCHIVE "${_CM0_BSP_RELEASE_DIR}/cm0_sdk.tar.gz")
-set(_CM0_BSP_SYSROOT "${_CM0_BSP_RELEASE_DIR}/sysroot")
-set(_CM0_BSP_TOOLCHAIN
-    "${_CM0_BSP_SYSROOT}/usr/share/cm0-bsp/toolchain.cmake")
-
-function(_cm0_bsp_sysroot_is_ready output)
-    if(EXISTS "${_CM0_BSP_TOOLCHAIN}" AND
-       EXISTS "${_CM0_BSP_SYSROOT}/usr/include" AND
-       EXISTS "${_CM0_BSP_SYSROOT}/usr/lib")
-        set(${output} TRUE PARENT_SCOPE)
-    else()
-        set(${output} FALSE PARENT_SCOPE)
+if(CM0_SYSROOT)
+    get_filename_component(_camera_sysroot "${CM0_SYSROOT}" ABSOLUTE)
+else()
+    set(_camera_lock "${CMAKE_CURRENT_LIST_DIR}/cm0-sysroot-packages.json")
+    file(SHA256 "${_camera_lock}" _camera_lock_hash)
+    string(SUBSTRING "${_camera_lock_hash}" 0 16 _camera_lock_id)
+    set(_camera_sysroot "${CM0_SYSROOT_CACHE_DIR}/${_camera_lock_id}/sysroot")
+    find_program(_camera_python NAMES python3 REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+    execute_process(
+        COMMAND "${_camera_python}" "${_camera_project_root}/tools/prepare-cm0-sysroot.py"
+            --lock "${_camera_lock}" --output "${_camera_sysroot}"
+        RESULT_VARIABLE _camera_prepare_result
+        OUTPUT_VARIABLE _camera_prepare_output
+        ERROR_VARIABLE _camera_prepare_error)
+    if(NOT _camera_prepare_result EQUAL 0)
+        message(FATAL_ERROR "${_camera_prepare_output}${_camera_prepare_error}")
     endif()
-endfunction()
-
-_cm0_bsp_sysroot_is_ready(_CM0_BSP_READY)
-if(NOT _CM0_BSP_READY)
-    file(MAKE_DIRECTORY "${_CM0_BSP_RELEASE_DIR}")
-    file(LOCK "${_CM0_BSP_RELEASE_DIR}" DIRECTORY GUARD FILE TIMEOUT 900
-        RESULT_VARIABLE _CM0_BSP_LOCK_RESULT)
-    if(NOT _CM0_BSP_LOCK_RESULT STREQUAL "0")
-        message(FATAL_ERROR
-            "Could not lock the CM0 BSP cache: ${_CM0_BSP_LOCK_RESULT}")
-    endif()
-
-    _cm0_bsp_sysroot_is_ready(_CM0_BSP_READY)
-    if(NOT _CM0_BSP_READY)
-        message(STATUS "Downloading CM0 BSP ${CM0_BSP_VERSION}")
-        file(DOWNLOAD "${CM0_BSP_URL}" "${_CM0_BSP_ARCHIVE}"
-            EXPECTED_HASH "SHA256=${CM0_BSP_SHA256}"
-            INACTIVITY_TIMEOUT 60
-            SHOW_PROGRESS
-            STATUS _CM0_BSP_DOWNLOAD_STATUS)
-        list(GET _CM0_BSP_DOWNLOAD_STATUS 0 _CM0_BSP_DOWNLOAD_CODE)
-        list(GET _CM0_BSP_DOWNLOAD_STATUS 1 _CM0_BSP_DOWNLOAD_MESSAGE)
-        if(NOT _CM0_BSP_DOWNLOAD_CODE EQUAL 0)
-            file(REMOVE "${_CM0_BSP_ARCHIVE}")
-            message(FATAL_ERROR
-                "Failed to download CM0 BSP ${CM0_BSP_VERSION} from\n"
-                "  ${CM0_BSP_URL}\n"
-                "${_CM0_BSP_DOWNLOAD_MESSAGE}")
-        endif()
-
-        set(_CM0_BSP_STAGING "${_CM0_BSP_RELEASE_DIR}/sysroot.extracting")
-        file(REMOVE_RECURSE "${_CM0_BSP_STAGING}")
-        file(MAKE_DIRECTORY "${_CM0_BSP_STAGING}")
-        message(STATUS "Extracting CM0 BSP ${CM0_BSP_VERSION}")
-        file(ARCHIVE_EXTRACT
-            INPUT "${_CM0_BSP_ARCHIVE}"
-            DESTINATION "${_CM0_BSP_STAGING}")
-
-        if(NOT EXISTS "${_CM0_BSP_STAGING}/usr/share/cm0-bsp/toolchain.cmake" OR
-           NOT EXISTS "${_CM0_BSP_STAGING}/usr/include" OR
-           NOT EXISTS "${_CM0_BSP_STAGING}/usr/lib")
-            file(REMOVE_RECURSE "${_CM0_BSP_STAGING}")
-            message(FATAL_ERROR
-                "The downloaded CM0 BSP archive does not contain a complete sysroot")
-        endif()
-
-        file(REMOVE_RECURSE "${_CM0_BSP_SYSROOT}")
-        file(RENAME "${_CM0_BSP_STAGING}" "${_CM0_BSP_SYSROOT}")
-    endif()
+    string(STRIP "${_camera_prepare_output}" _camera_prepare_output)
+    message(STATUS "${_camera_prepare_output}")
+    file(READ "${_camera_lock}" _camera_lock_content)
+    string(JSON _camera_package GET "${_camera_lock_content}" libcamera_package)
+    string(JSON _camera_version GET "${_camera_lock_content}" libcamera_version)
+    set(LIBCAMERA_DEBIAN_PACKAGE "${_camera_package}" CACHE STRING
+        "Debian package matching the managed target sysroot" FORCE)
+    set(LIBCAMERA_PINNED_VERSION "${_camera_version}" CACHE STRING
+        "libcamera version matching the managed target sysroot" FORCE)
 endif()
 
-set(CM0_SDK_ROOT "${_CM0_BSP_SYSROOT}" CACHE PATH
-    "Path to the CM0 BSP sysroot" FORCE)
-list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
-    CM0_BSP_CACHE_DIR
-    CM0_BSP_SHA256
-    CM0_BSP_URL
-    CM0_SDK_ROOT)
+# Migrate existing cm0-cross builds too: find_* otherwise trusts cached paths
+# into the old BSP, even after CMAKE_SYSROOT has changed.
+if(CMAKE_SYSROOT AND (NOT CMAKE_SYSROOT STREQUAL _camera_sysroot OR
+                     NOT CAMERA_CONFIGURED_SYSROOT STREQUAL _camera_sysroot))
+    set(_camera_old_sysroot "${CMAKE_SYSROOT}")
+    get_cmake_property(_camera_cached_variables CACHE_VARIABLES)
+    foreach(_camera_variable IN LISTS _camera_cached_variables)
+        string(FIND "${${_camera_variable}}" "${_camera_old_sysroot}" _camera_old_path)
+        if(NOT _camera_old_path EQUAL -1 OR _camera_variable MATCHES "^__pkg_config_")
+            unset(${_camera_variable} CACHE)
+        endif()
+    endforeach()
+endif()
+set(CAMERA_CONFIGURED_SYSROOT "${_camera_sysroot}" CACHE INTERNAL "Last configured camera sysroot" FORCE)
+set(CM0_SDK_ROOT "${_camera_sysroot}" CACHE PATH "Path to the CM0 target sysroot" FORCE)
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES CM0_SYSROOT CM0_SYSROOT_CACHE_DIR)
 
-include("${_CM0_BSP_TOOLCHAIN}")
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
+    CM0_SDK_ROOT
+    CM0_MULTIARCH)
+
+if(NOT EXISTS "${CM0_SDK_ROOT}/usr/include" OR
+   NOT EXISTS "${CM0_SDK_ROOT}/usr/lib")
+    message(FATAL_ERROR
+        "CM0 target sysroot is missing or incomplete: ${CM0_SDK_ROOT}\n"
+        "Set CM0_SYSROOT to a complete ARM64 development sysroot.")
+endif()
+
+set(CMAKE_SYSROOT "${CM0_SDK_ROOT}" CACHE PATH
+    "Sysroot used for CM0 cross builds" FORCE)
+set(CMAKE_SYSROOT_COMPILE "${CMAKE_SYSROOT}" CACHE PATH
+    "Compile sysroot used for CM0 cross builds" FORCE)
+set(CMAKE_SYSROOT_LINK "${CMAKE_SYSROOT}" CACHE PATH
+    "Link sysroot used for CM0 cross builds" FORCE)
+
+# Homebrew's compiler does not add Debian's multiarch include automatically.
+set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
+    "${CMAKE_SYSROOT}/usr/include/${CM0_MULTIARCH}" CACHE STRING
+    "Target multiarch C system include directory" FORCE)
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
+    "${CMAKE_SYSROOT}/usr/include/${CM0_MULTIARCH}" CACHE STRING
+    "Target multiarch C++ system include directory" FORCE)
+
+find_program(_CM0_C_COMPILER NAMES aarch64-linux-gnu-gcc REQUIRED)
+set(CMAKE_C_COMPILER "${_CM0_C_COMPILER}" CACHE FILEPATH
+    "AArch64 Linux C compiler" FORCE)
+
+find_program(_CM0_CXX_COMPILER NAMES aarch64-linux-gnu-g++)
+if(_CM0_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER "${_CM0_CXX_COMPILER}" CACHE FILEPATH
+        "AArch64 Linux C++ compiler" FORCE)
+endif()
+
+set(CMAKE_LIBRARY_ARCHITECTURE "${CM0_MULTIARCH}")
+set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}" CACHE STRING
+    "Root paths for cross find_* calls" FORCE)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+list(PREPEND CMAKE_PREFIX_PATH
+    "${CMAKE_SYSROOT}/usr"
+    "${CMAKE_SYSROOT}/usr/lib/${CM0_MULTIARCH}/cmake"
+    "${CMAKE_SYSROOT}/usr/local")
+
+set(ENV{PKG_CONFIG_SYSROOT_DIR} "${CMAKE_SYSROOT}")
+set(ENV{PKG_CONFIG_PATH} "")
+set(ENV{PKG_CONFIG_LIBDIR}
+    "${CMAKE_SYSROOT}/usr/local/lib/${CM0_MULTIARCH}/pkgconfig:${CMAKE_SYSROOT}/usr/local/lib/pkgconfig:${CMAKE_SYSROOT}/usr/lib/${CM0_MULTIARCH}/pkgconfig:${CMAKE_SYSROOT}/usr/lib/pkgconfig:${CMAKE_SYSROOT}/usr/share/pkgconfig:${CMAKE_SYSROOT}/lib/${CM0_MULTIARCH}/pkgconfig")
+
+file(GLOB _CM0_GCC_RUNTIME_DIRS LIST_DIRECTORIES true
+    "${CMAKE_SYSROOT}/usr/lib/gcc/${CM0_MULTIARCH}/*")
+set(_CM0_MULTIARCH_LIB_DIR "${CMAKE_SYSROOT}/usr/lib/${CM0_MULTIARCH}")
+if(_CM0_GCC_RUNTIME_DIRS)
+    list(SORT _CM0_GCC_RUNTIME_DIRS COMPARE NATURAL ORDER DESCENDING)
+    list(GET _CM0_GCC_RUNTIME_DIRS 0 CM0_GCC_RUNTIME_DIR)
+    set(CM0_GCC_RUNTIME_DIR "${CM0_GCC_RUNTIME_DIR}" CACHE PATH
+        "GCC runtime directory inside the CM0 sysroot")
+    set(_CM0_SYSROOT_LINK_FLAGS
+        "-B${_CM0_MULTIARCH_LIB_DIR}/ -B${CM0_GCC_RUNTIME_DIR}/ -Wl,-rpath-link,${_CM0_MULTIARCH_LIB_DIR} -L${_CM0_MULTIARCH_LIB_DIR}")
+    string(APPEND CMAKE_EXE_LINKER_FLAGS_INIT " ${_CM0_SYSROOT_LINK_FLAGS}")
+    string(APPEND CMAKE_SHARED_LINKER_FLAGS_INIT " ${_CM0_SYSROOT_LINK_FLAGS}")
+endif()

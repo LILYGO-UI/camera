@@ -179,8 +179,8 @@ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 brew install aarch64-unknown-linux-gnu
 ```
 
-The BSP toolchain expects `aarch64-linux-gnu-gcc` and
-`aarch64-linux-gnu-g++` on `PATH`. The BSP supplies the target sysroot; it does
+The CM0 toolchain expects `aarch64-linux-gnu-gcc` and
+`aarch64-linux-gnu-g++` on `PATH`. The build prepares the target sysroot; it does
 not install the host cross compiler.
 
 ## Build and Test
@@ -238,30 +238,37 @@ Build the AArch64 Debian package:
 lpm pack
 ```
 
-The first device configuration downloads and verifies CM0 BSP `0.1.0` and caches
-its sysroot in `.cache/cm0-bsp/0.1.0`. The BSP runtime is older than the target
-image runtime, so the device build must use a matching target development root
-containing the `0.8.0+rpt20261104-1` headers and libraries:
+The `cm0-cross` preset automatically prepares a complete ARM64 development
+sysroot from the package versions and SHA-256 hashes in
+`cmake/cm0-sysroot-packages.json`. It includes the matching
+`0.8.0+rpt20261104-1` libcamera headers, runtime libraries, IPA and Debian
+symbols/ownership metadata used by CPack. Downloads and the extracted sysroot
+are cached under `.cache/cm0-sysroot/`; subsequent builds reuse them offline.
+The old BSP `0.1.0` is no longer needed for this application.
+
+The host needs Python 3.9+, `curl`, `dpkg-deb` and `dpkg-shlibdeps`, in addition
+to CMake and the AArch64 compiler. On macOS, `brew install dpkg` provides both
+Debian tools. Existing builds automatically discard paths and pkg-config
+results cached from the old BSP. No `LIBCAMERA_DEV_ROOT` argument is needed.
+
+For a custom or pre-provisioned sysroot, configure with
+`-DCM0_SYSROOT=/path/to/sysroot`. It must include target headers, libraries and
+`var/lib/dpkg/{status,info}` metadata. If it uses a different libcamera version,
+set both `LIBCAMERA_DEBIAN_PACKAGE` and `LIBCAMERA_PINNED_VERSION` to match.
+`LIBCAMERA_DEV_ROOT` remains available for an explicit development prefix;
+its libraries must also be present in the packaging sysroot. Clear old
+explicit overrides with `cmake --fresh --preset cm0-cross` (CMake 3.24+) when
+returning to the automatic configuration.
+
+The sysroot preparation regression tests run without network access:
 
 ```sh
-cmake --fresh --preset cm0-cross \
-  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.8.0+rpt20261104-1
-lpm pack --preset cm0-cross
+python3 -m unittest discover -s tests -p test_cm0_sysroot.py
 ```
-
-If you already have matching libcamera development files, provide their root
-during CMake configuration with
-`-DLIBCAMERA_DEV_ROOT=/path/to/libcamera-dev`. The directory may contain
-`usr/include` and `usr/lib`, or directly `include` and `lib`. A custom BSP or
-libcamera ABI must also supply matching target libraries and set
-`LIBCAMERA_DEBIAN_PACKAGE` and `LIBCAMERA_PINNED_VERSION` to the matching
-runtime package name and Debian version. Use a fresh build directory (or
-`--fresh` with CMake 3.24+) when upgrading: an existing CMake cache can retain
-the old headers, library paths, and dependency version.
 
 On an ARM64 Raspberry Pi OS trixie build host with the Raspberry Pi and LILYGO
 APT repositories configured, the package can also be built against the native
-development libraries, without the older BSP sysroot:
+development libraries, without cross-compiling:
 
 ```sh
 sudo apt update
@@ -286,7 +293,7 @@ or runtime packages. The camera service must expose the GC2093 node and the
 application user must have access to the selected video node; set
 `CAMERA_K230_DEVICE` when a fixed node is required.
 
-The package is written to `dist/lilygo-ui-camera_0.1.3_arm64.deb`. It depends on
+The package is written to `dist/lilygo-ui-camera_0.1.4_arm64.deb`. It depends on
 `lilygo-ui-appkit-dev >= 0.1.0` for the shared runtime fonts as well as the
 camera and media libraries. Make sure the AppKit package is available from the
 device's configured package sources. On the CM0 Raspberry Pi OS image, install
@@ -294,10 +301,10 @@ the runtime dependencies and package:
 
 ```sh
 sudo apt update
-sudo apt install ./lilygo-ui-camera_0.1.3_arm64.deb
+sudo apt install ./lilygo-ui-camera_0.1.4_arm64.deb
 ```
 
-Version `0.1.3` requires `libcamera0.8` and `libcamera-ipa` at
+Version `0.1.4` requires `libcamera0.8` and `libcamera-ipa` at
 `0.8.0+rpt20261104-1`; APT installs these dependencies together. The binary must
 be rebuilt for this ABI: changing only the dependency names of an older DEB
 does not make its libcamera 0.7 binary compatible. Publish the new ARM64 package
@@ -359,7 +366,7 @@ background and confirms the output before reporting a successful save.
 | `lpm is required to read project metadata` | Activate `.venv`, install LPM, or set `LPM_EXECUTABLE`. |
 | AppKit or LVGL sources are missing | Run `git submodule update --init --recursive`. |
 | SDL2 or FreeType is not found | Install the host development packages; on macOS, check Homebrew paths. |
-| BSP or libcamera development files cannot be downloaded/found | Check network access and disk space, or configure `LIBCAMERA_DEV_ROOT` with matching CM0 target files. |
+| CM0 development files cannot be downloaded/found | Check network access, disk space, Python, curl and dpkg; or set `CM0_SYSROOT` to a complete ARM64 development sysroot with Debian metadata. |
 | IMX219 is not detected | On CM0, check the camera cable, board overlay, I2C0 pin setup, and kernel camera probe logs. |
 | K230 camera pipeline is unavailable | Stop RTSP, confirm `isp_media_server` and `/usr/lib/libvvcam.so`, inspect `/tmp/isp.err.log`, and use `v4l2-ctl --list-devices`/`--list-formats-ext` to find a selected node exposing NV16 or NV12. |
 | Camera is detected but no preview appears | Check that another process is not using the camera and that the platform camera runtime matches the board image. |

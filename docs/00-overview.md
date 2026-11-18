@@ -65,7 +65,7 @@ UI 不在 LVGL 回调中执行阻塞拍摄或编码。摄像头初始化、保�
 默认文件目录是 `$HOME/Camera`，可通过 `CAMERA_OUTPUT_DIR` 覆盖。
 拍摄输出是用户数据，重启或关闭应用不清理。测试使用临时目录，避免混入真实照片。
 
-设备依赖与 BSP ABI 匹配的 libcamera 运行时、`libcamera-ipa`、FFmpeg 和 AppKit。
+设备依赖与构建 sysroot ABI 匹配的 libcamera 运行时、`libcamera-ipa`、FFmpeg 和 AppKit。
 构建主机使用合成后端，不需要安装 libcamera；设备模式
 由 C++ 直接使用 CameraManager、FrameBuffer 和 Request，无需 Picamera2、NumPy 或
 Python worker。
@@ -88,10 +88,10 @@ ctest --preset host-simulator
 横竖屏。UI 修改还需要检查渲染结果，确认中文、控件命中范围、计时和状态提示正常。
 修改安装或打包规则时还要构建 `cm0-cross` 并用 CPack 生成 Debian 包。
 
-交叉构建从 CM0 BSP sysroot 查找 `libcamera/camera.h`、`libcamera.so` 和
-`libcamera-base.so`；若 BSP 仅包含运行库，需补充匹配版本的 `libcamera-dev:arm64`
-开发文件，或设置 `LIBCAMERA_DEV_ROOT` 指向已解包的开发包根目录（`usr/include` / `usr/lib`）
-或开发前缀（`include` / `lib`）。主机模拟 preset 不查找或链接这些设备库。
+交叉构建自动按 `cmake/cm0-sysroot-packages.json` 的版本和 SHA-256 准备 ARM64 sysroot，
+从中查找 `libcamera/camera.h`、`libcamera.so` 和 `libcamera-base.so`。
+缓存位于 `.cache/cm0-sysroot/`，同时保留 CPack 需要的 Debian 符号和文件归属元数据；
+自备完整 sysroot 可通过 `CM0_SYSROOT` 指定。主机模拟 preset 不查找或链接这些设备库。
 
 真实设备验收需要检查 IMX219 枚举、取景颜色和方向、JPEG 实际尺寸、MP4 可播放性、
 三档切换与失败恢复、录像结束/关闭时的保存行为、连续拍摄和错误恢复，以及 CM0 上的性能。

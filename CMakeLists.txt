@@ -18,8 +18,9 @@ endif()
 find_package(LilyGoUI CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 if(NOT LILYGO_UI_PLATFORM STREQUAL "k230")
-    set(_libcamera_default_package "libcamera0.8")
-    set(_libcamera_default_version "0.8.0+rpt20261104-1")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cm0-sysroot-packages.json" _camera_sysroot_lock)
+    string(JSON _libcamera_default_package GET "${_camera_sysroot_lock}" libcamera_package)
+    string(JSON _libcamera_default_version GET "${_camera_sysroot_lock}" libcamera_version)
     set(LIBCAMERA_DEBIAN_PACKAGE "${_libcamera_default_package}" CACHE STRING
         "Debian package matching the libcamera ABI linked by the target image")
     set(LIBCAMERA_PINNED_VERSION "${_libcamera_default_version}" CACHE STRING

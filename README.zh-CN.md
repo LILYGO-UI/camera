@@ -152,8 +152,8 @@ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 brew install aarch64-unknown-linux-gnu
 ```
 
-BSP 工具链要求 `aarch64-linux-gnu-gcc` 和 `aarch64-linux-gnu-g++` 位于 `PATH` 中。
-BSP 提供目标平台 sysroot，但不会安装开发机所需的交叉编译器。
+CM0 工具链要求 `aarch64-linux-gnu-gcc` 和 `aarch64-linux-gnu-g++` 位于 `PATH` 中。
+构建流程会准备目标 sysroot，但不会安装开发机所需的交叉编译器。
 
 ## 构建与测试
 
@@ -205,25 +205,32 @@ lpm test
 lpm pack
 ```
 
-首次配置设备构建时会下载并校验 CM0 BSP `0.1.0`，并将 sysroot 缓存到
-`.cache/cm0-bsp/0.1.0`。当前 BSP 中的运行库版本较旧，设备构建必须通过
-`LIBCAMERA_DEV_ROOT` 指向与目标镜像一致、同时包含 `0.8.0+rpt20261104-1` 头文件和库的目录：
+`cm0-cross` 会根据 `cmake/cm0-sysroot-packages.json` 中锁定的版本和 SHA-256，
+自动下载并准备完整的 ARM64 开发 sysroot，包含 `0.8.0+rpt20261104-1` 的 libcamera
+头文件、运行库、IPA，以及 CPack 依赖分析所需的 Debian 符号和文件归属元数据。
+下载文件与解包结果缓存在 `.cache/cm0-sysroot/`，后续构建可离线复用。
+此应用不再依赖旧版 CM0 BSP `0.1.0`。
+
+除了 CMake 和 AArch64 交叉编译器，开发机还需要 Python 3.9+、`curl`、`dpkg-deb`
+和 `dpkg-shlibdeps`。macOS 可用 `brew install dpkg` 安装两个 Debian 工具。
+已有构建目录会自动清理指向旧 BSP 的路径和 pkg-config 查询缓存，
+无需再指定 `LIBCAMERA_DEV_ROOT`。
+
+使用自备或预先缓存的完整 sysroot 时，可配置 `-DCM0_SYSROOT=/path/to/sysroot`。
+其中必须包含目标头文件、库及 `var/lib/dpkg/{status,info}` 元数据。
+如果 libcamera 版本不同，还需设置匹配的 `LIBCAMERA_DEBIAN_PACKAGE` 和
+`LIBCAMERA_PINNED_VERSION`。`LIBCAMERA_DEV_ROOT` 仍可用于显式开发目录，
+但其中的库也必须存在于打包使用的 sysroot 中。若以前设置过显式覆盖参数，
+可用 `cmake --fresh --preset cm0-cross`（CMake 3.24+）恢复自动配置。
+
+sysroot 准备流程的回归测试无需网络：
 
 ```sh
-cmake --fresh --preset cm0-cross \
-  -DLIBCAMERA_DEV_ROOT=/path/to/libcamera-0.8.0+rpt20261104-1
-lpm pack --preset cm0-cross
+python3 -m unittest discover -s tests -p test_cm0_sysroot.py
 ```
 
-如果已有匹配的 libcamera 开发文件，可在 CMake 配置时通过
-`-DLIBCAMERA_DEV_ROOT=/path/to/libcamera-dev` 指定根目录。目录可包含
-`usr/include` 和 `usr/lib`，也可直接包含 `include` 与 `lib`。自定义 BSP 或 libcamera ABI
-还必须提供匹配的目标库，并通过 `LIBCAMERA_DEBIAN_PACKAGE` 和 `LIBCAMERA_PINNED_VERSION`
-设置设备上的运行时软件包名和 Debian 版本。升级时使用新的构建目录，或使用 CMake 3.24+
-的 `--fresh`，避免旧缓存继续引用 0.7 的头文件、库路径和依赖版本。
-
 也可以在已配置 Raspberry Pi 和 LILYGO APT 软件源的 ARM64 Raspberry Pi OS trixie
-构建主机上，直接使用本机开发库打包，无需旧版 BSP sysroot：
+构建主机上，直接使用本机开发库打包：
 
 ```sh
 sudo apt update
@@ -240,16 +247,16 @@ cpack --config build/cm0-native/CPackConfig.cmake -B dist
 
 此方式同样需要先安装 `lpm` 并初始化 AppKit 子模块。
 
-软件包输出到 `dist/lilygo-ui-camera_0.1.3_arm64.deb`。它依赖
+软件包输出到 `dist/lilygo-ui-camera_0.1.4_arm64.deb`。它依赖
 `lilygo-ui-appkit-dev >= 0.1.0` 提供共享运行时字体，并依赖相机和媒体库。
 请确保设备配置的软件源中包含 AppKit 软件包。在 CM0 Raspberry Pi OS 镜像上安装运行依赖和应用软件包：
 
 ```sh
 sudo apt update
-sudo apt install ./lilygo-ui-camera_0.1.3_arm64.deb
+sudo apt install ./lilygo-ui-camera_0.1.4_arm64.deb
 ```
 
-`0.1.3` 要求 `libcamera0.8` 和 `libcamera-ipa` 同为 `0.8.0+rpt20261104-1`，
+`0.1.4` 要求 `libcamera0.8` 和 `libcamera-ipa` 同为 `0.8.0+rpt20261104-1`，
 APT 会一并安装。必须用该版本的开发库重新编译，不能只修改旧 DEB 的依赖名称。
 重新运行 pi-gen 前，先把新的 ARM64 软件包发布到签名的 LILYGO APT 仓库；
 stage2 和 stage5 的安装脚本已经会刷新仓库索引。
@@ -301,7 +308,7 @@ CAMERA_SIMULATE=0 /usr/bin/lilygo-ui-camera --display drm \
 | `lpm is required to read project metadata` | 激活 `.venv`、安装 LPM，或设置 `LPM_EXECUTABLE`。 |
 | 找不到 AppKit 或 LVGL 源码 | 执行 `git submodule update --init --recursive`。 |
 | 找不到 SDL2 或 FreeType | 安装主机开发依赖；macOS 上检查 Homebrew 路径。 |
-| 无法下载/找到 BSP 或 libcamera 开发文件 | 检查网络和磁盘空间；CM0 构建可通过 `LIBCAMERA_DEV_ROOT` 指定匹配的目标文件。 |
+| 无法下载/找到 CM0 开发文件 | 检查网络、磁盘空间、Python、curl 和 dpkg；或通过 `CM0_SYSROOT` 指定包含 Debian 元数据的完整 ARM64 开发 sysroot。 |
 | 未检测到 IMX219 | 在 CM0 上检查摄像头排线、板卡 overlay、I2C0 引脚配置和内核相机探测日志。 |
 | K230 相机管线不可用 | 停止 RTSP，确认 `isp_media_server` 和 `/usr/lib/libvvcam.so`，检查 `/tmp/isp.err.log`，并用 `v4l2-ctl --list-devices`/`--list-formats-ext` 查找提供 NV16 或 NV12 的节点。 |
 | 已检测到摄像头但没有取景 | 确认没有其他进程占用摄像头，并确认平台相机运行时与板卡镜像匹配。 |

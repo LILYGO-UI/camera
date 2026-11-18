@@ -1,0 +1,526 @@
+{
+  "schema_version": 1,
+  "architecture": "arm64",
+  "libcamera_version": "0.8.0+rpt20261104-1",
+  "packages": [
+    {
+      "Package": "gcc-14-base",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "34ee90679b018c0e64234747a4c4c0ae6b7f63541115037465a8627c2dfbc594",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14-base_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libgcc-s1",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "1108bc87879833d6d9a145f22a4a15cddb34e065b4b5f4b97bee586adbac2851",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgcc-s1_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libc6",
+      "Version": "2.41-12+rpt1+deb13u4",
+      "Architecture": "arm64",
+      "SHA256": "5c5376fdd2d6a4c9927eb0d6fcfea232f64b8ab44103e65bb61f621e99d792e1",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/g/glibc/libc6_2.41-12+rpt1+deb13u4_arm64.deb"
+    },
+    {
+      "Package": "libc-dev-bin",
+      "Version": "2.41-12+rpt1+deb13u4",
+      "Architecture": "arm64",
+      "SHA256": "843250b58bdcd5846e0a1f61512f4aeb27821f685f244a38a33bdb0715d9a536",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/g/glibc/libc-dev-bin_2.41-12+rpt1+deb13u4_arm64.deb"
+    },
+    {
+      "Package": "linux-libc-dev",
+      "Version": "1:6.18.60-1+rpt1",
+      "Architecture": "all",
+      "SHA256": "a87c1d6e14744688627c3191da27e0372c6a1a35586433637874d4dea32cf344",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/l/linux/linux-libc-dev_6.18.60-1+rpt1_all.deb"
+    },
+    {
+      "Package": "libcrypt1",
+      "Version": "1:4.4.38-1",
+      "Architecture": "arm64",
+      "SHA256": "b9aaa808aa3812b3de3e54eb5dfb16762c1779db032604abef2354c02fdc29b8",
+      "URL": "https://deb.debian.org/debian/pool/main/libx/libxcrypt/libcrypt1_4.4.38-1_arm64.deb"
+    },
+    {
+      "Package": "libcrypt-dev",
+      "Version": "1:4.4.38-1",
+      "Architecture": "arm64",
+      "SHA256": "eec6d4658495cdb8ce505cad91e0918edb8086677f280f3851c07ccd70543054",
+      "URL": "https://deb.debian.org/debian/pool/main/libx/libxcrypt/libcrypt-dev_4.4.38-1_arm64.deb"
+    },
+    {
+      "Package": "rpcsvc-proto",
+      "Version": "1.4.3-1+b1",
+      "Architecture": "arm64",
+      "SHA256": "6ae3c216e6c7d8e042ad3f122b8aa89aff56b2b5174b1c5780a7841b3becd61c",
+      "URL": "https://deb.debian.org/debian/pool/main/r/rpcsvc-proto/rpcsvc-proto_1.4.3-1+b1_arm64.deb"
+    },
+    {
+      "Package": "libc6-dev",
+      "Version": "2.41-12+rpt1+deb13u4",
+      "Architecture": "arm64",
+      "SHA256": "fc6f740c366136d57b18376025635c79591baa1811cfc5b5b66e9afd99c09633",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/g/glibc/libc6-dev_2.41-12+rpt1+deb13u4_arm64.deb"
+    },
+    {
+      "Package": "libgomp1",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "43e84cb7971d8a4d8870cab6204e998ea4f23ee1339bb0ff556dd881bac82d25",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgomp1_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libitm1",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "d6f0255b498af876ab7bf4420672e43cbe58dcd577f0711131cbfbcbee283cdb",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libitm1_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libatomic1",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "7ccff90234484bf21ae5ecb79d25b6a84b2f4038f65dd139085b2e3a937cd8dc",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libatomic1_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libasan8",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "5621bd583a3390b45726a8eebe23601f7fad86a25193e5349976cbf17e2bc9ad",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libasan8_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "liblsan0",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "488a54a5fe01a926ae16d73dc7ea9f530f1bf63fae73640f741695eec2541a38",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/liblsan0_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libtsan2",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "c767c05f3dade13b5780478366029f2ff32e44bea852c6a4d7a1f93f1363d3e3",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libtsan2_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libstdc++6",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "6669b0c52a2e7c6af9adfdabce3ff6e286065cdfbc7b85280862b5f799daebee",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libstdc++6_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libubsan1",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "b5539003465ea1e60f66b9e3a1019da182e826c82d480944f3656b12351c74c8",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libubsan1_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libhwasan0",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "5a758db399fafd354b6488c4f250b7670fb1f61c31b4e4f329d0fbb750a17084",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libhwasan0_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libgcc-14-dev",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "64b8ebc7182a69aa9525df6eab5e7eb849b947e350d821549f8a8a3e9b19e5ba",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libgcc-14-dev_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libstdc++-14-dev",
+      "Version": "14.2.0-19",
+      "Architecture": "arm64",
+      "SHA256": "8760122d044cd8eb8c69426311d6b5ce7bb8f0f76e9cda1944d153ae878138f8",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gcc-14/libstdc++-14-dev_14.2.0-19_arm64.deb"
+    },
+    {
+      "Package": "libdrm-common",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "all",
+      "SHA256": "8ff784daec4efb70c269cace24fba1751d0a99ad5cce0ba504f14b28ff1fc04a",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-common_2.4.134-3~bpo13+1+rpt1_all.deb"
+    },
+    {
+      "Package": "libdrm2",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "6da374f816e1674069d734364eefa2eec435518a76fd2e3989ab6d58c390d0d6",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm2_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "zlib1g",
+      "Version": "1:1.3.dfsg+really1.3.1-1+b1",
+      "Architecture": "arm64",
+      "SHA256": "209aa5cf671e97b9eb0410844fa6df4cae2e75b0c72e7802ab6c8ece13e6ddef",
+      "URL": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1+b1_arm64.deb"
+    },
+    {
+      "Package": "libpciaccess0",
+      "Version": "0.17-3+b3",
+      "Architecture": "arm64",
+      "SHA256": "2d22631116e5eb4f2e49e6b1ec2933c68d72e4e54c07cf7a17b82f8073db40b2",
+      "URL": "https://deb.debian.org/debian/pool/main/libp/libpciaccess/libpciaccess0_0.17-3+b3_arm64.deb"
+    },
+    {
+      "Package": "libdrm-intel1",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "e3d0f7f75ef3efbec44fac3d8487a2eb9e6234635199015e1bcb62e4ced183c6",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-intel1_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libdrm-radeon1",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "b422c9ec8068de6b7e2fc54c4cf9aee5d60711b62ca500c486e767681ff209a4",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-radeon1_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libdrm-nouveau2",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "18827cb58d87e6100e64776839c7c67a34647b0e647032111151e25277f3a927",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-nouveau2_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libdrm-amdgpu1",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "fc1193658b5457568f0310b73ef9490460219eac5e917e25a373ea486bea4c9c",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-amdgpu1_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libdrm-freedreno1",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "4f34df0b07a43e98ce34347c3b6d82226470e328a264fe7f44bf6e9db84cad50",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-freedreno1_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libdrm-tegra0",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "526c90fe462a428733f3c779ec3d22872122451cad848a0c0d2a47da93a09a0c",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-tegra0_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libdrm-etnaviv1",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "2a6a4ee7e8049ca0e7cd5fc5d7a1946ac3a0208e35859bc2361e043c2cf550ba",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-etnaviv1_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libpciaccess-dev",
+      "Version": "0.17-3+b3",
+      "Architecture": "arm64",
+      "SHA256": "f42cd8f269f075f9251de4fb3a94ab58f8c098104ec810ec89f80cd20c456868",
+      "URL": "https://deb.debian.org/debian/pool/main/libp/libpciaccess/libpciaccess-dev_0.17-3+b3_arm64.deb"
+    },
+    {
+      "Package": "libdrm-dev",
+      "Version": "2.4.134-3~bpo13+1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "06b3311600d4ebfb9eaaf999f90bc52b8c3e7222146a902d3907e41aa11e6587",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libd/libdrm/libdrm-dev_2.4.134-3~bpo13+1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libbrotli1",
+      "Version": "1.1.0-2+b7",
+      "Architecture": "arm64",
+      "SHA256": "10270398c4842e71c72b4081fa1761728b3225d6c8dce7c58d5baafe58a5e18f",
+      "URL": "https://deb.debian.org/debian/pool/main/b/brotli/libbrotli1_1.1.0-2+b7_arm64.deb"
+    },
+    {
+      "Package": "libbz2-1.0",
+      "Version": "1.0.8-6",
+      "Architecture": "arm64",
+      "SHA256": "3537fe4fc577a60c8a9568873cd577db7ebc135eb8bb1825f18caf8972d9d2f2",
+      "URL": "https://deb.debian.org/debian/pool/main/b/bzip2/libbz2-1.0_1.0.8-6_arm64.deb"
+    },
+    {
+      "Package": "libpng16-16t64",
+      "Version": "1.6.48-1+deb13u5",
+      "Architecture": "arm64",
+      "SHA256": "11096ad43504ca24e8044bcc89e922d932a2812ff25568613b28d22235190ba5",
+      "URL": "https://deb.debian.org/debian/pool/main/libp/libpng1.6/libpng16-16t64_1.6.48-1+deb13u5_arm64.deb"
+    },
+    {
+      "Package": "libfreetype6",
+      "Version": "2.13.3+dfsg-1+deb13u1",
+      "Architecture": "arm64",
+      "SHA256": "0c426e83f1af816b9a4df9056fd2238463d1cd07969ee640965da9fb6ecaf107",
+      "URL": "https://deb.debian.org/debian/pool/main/f/freetype/libfreetype6_2.13.3+dfsg-1+deb13u1_arm64.deb"
+    },
+    {
+      "Package": "libbrotli-dev",
+      "Version": "1.1.0-2+b7",
+      "Architecture": "arm64",
+      "SHA256": "6c1fb26205d7241406511b0b3e9b05d87d25c2288ac4dcc9d5d2ab3af5bd9116",
+      "URL": "https://deb.debian.org/debian/pool/main/b/brotli/libbrotli-dev_1.1.0-2+b7_arm64.deb"
+    },
+    {
+      "Package": "libbz2-dev",
+      "Version": "1.0.8-6",
+      "Architecture": "arm64",
+      "SHA256": "580ca6907c86073e275241fc25448bd7867938d0c326cc3975a9ea84f8a7ba0f",
+      "URL": "https://deb.debian.org/debian/pool/main/b/bzip2/libbz2-dev_1.0.8-6_arm64.deb"
+    },
+    {
+      "Package": "zlib1g-dev",
+      "Version": "1:1.3.dfsg+really1.3.1-1+b1",
+      "Architecture": "arm64",
+      "SHA256": "745ebcf1fa115e230af76216355d7290a24f1790fe3780249b519c0e4d30534f",
+      "URL": "https://deb.debian.org/debian/pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.1-1+b1_arm64.deb"
+    },
+    {
+      "Package": "libpng-dev",
+      "Version": "1.6.48-1+deb13u5",
+      "Architecture": "arm64",
+      "SHA256": "a212fde02b2930302edcc959eaa2079bb459def3a92741cc09f6f55c250b8ca0",
+      "URL": "https://deb.debian.org/debian/pool/main/libp/libpng1.6/libpng-dev_1.6.48-1+deb13u5_arm64.deb"
+    },
+    {
+      "Package": "libfreetype-dev",
+      "Version": "2.13.3+dfsg-1+deb13u1",
+      "Architecture": "arm64",
+      "SHA256": "967117e243f1ac18cb822db246ff6c4f482fd272e89ea8b3b7760871ca74b3fe",
+      "URL": "https://deb.debian.org/debian/pool/main/f/freetype/libfreetype-dev_2.13.3+dfsg-1+deb13u1_arm64.deb"
+    },
+    {
+      "Package": "libzstd1",
+      "Version": "1.5.7+dfsg-1",
+      "Architecture": "arm64",
+      "SHA256": "924540bd59fdbfa77a0604360efdaca54411a43daf11c7e002a3c64791b67448",
+      "URL": "https://deb.debian.org/debian/pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-1_arm64.deb"
+    },
+    {
+      "Package": "libelf1t64",
+      "Version": "0.192-4",
+      "Architecture": "arm64",
+      "SHA256": "815b4265c7d6c89c5bbad456bdeed7af893da6912c9d16cf4c581001927c0e37",
+      "URL": "https://deb.debian.org/debian/pool/main/e/elfutils/libelf1t64_0.192-4_arm64.deb"
+    },
+    {
+      "Package": "liblzma5",
+      "Version": "5.8.1-1+deb13u1",
+      "Architecture": "arm64",
+      "SHA256": "6a7b98005f84fc26d66a45e432f70d0793646a734f8c44cd1626b3ffa8edd7c6",
+      "URL": "https://deb.debian.org/debian/pool/main/x/xz-utils/liblzma5_5.8.1-1+deb13u1_arm64.deb"
+    },
+    {
+      "Package": "libdw1t64",
+      "Version": "0.192-4",
+      "Architecture": "arm64",
+      "SHA256": "67efcbd99255a3468f6612a7719083ea1bed967d0bfae39863b5f0e190e0c5ec",
+      "URL": "https://deb.debian.org/debian/pool/main/e/elfutils/libdw1t64_0.192-4_arm64.deb"
+    },
+    {
+      "Package": "libgmp10",
+      "Version": "2:6.3.0+dfsg-3",
+      "Architecture": "arm64",
+      "SHA256": "a27bbc27f119161ea9702c8dd66f54131cdf0d2ca73000f50ea91ef2fdfef0fb",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gmp/libgmp10_6.3.0+dfsg-3_arm64.deb"
+    },
+    {
+      "Package": "libnettle8t64",
+      "Version": "3.10.1-1",
+      "Architecture": "arm64",
+      "SHA256": "16107ce5a7b522da021fa8aba42d42af9c5e90ddabfcda3710aff6ea95808ee0",
+      "URL": "https://deb.debian.org/debian/pool/main/n/nettle/libnettle8t64_3.10.1-1_arm64.deb"
+    },
+    {
+      "Package": "libhogweed6t64",
+      "Version": "3.10.1-1",
+      "Architecture": "arm64",
+      "SHA256": "cb92d5a51c4fd6c7b7cbb62aaa60c7af830d0bea5b410fb1f47ee685e26944d1",
+      "URL": "https://deb.debian.org/debian/pool/main/n/nettle/libhogweed6t64_3.10.1-1_arm64.deb"
+    },
+    {
+      "Package": "libunistring5",
+      "Version": "1.3-2",
+      "Architecture": "arm64",
+      "SHA256": "4847467a0e47039837895e88f5a99a4a86a3d8266be40c3c896fc7c10d552dc7",
+      "URL": "https://deb.debian.org/debian/pool/main/libu/libunistring/libunistring5_1.3-2_arm64.deb"
+    },
+    {
+      "Package": "libidn2-0",
+      "Version": "2.3.8-2",
+      "Architecture": "arm64",
+      "SHA256": "d2e5cef812f15db1eeb35f0a193158ee102a9e94284036c0e293521f2761d2d7",
+      "URL": "https://deb.debian.org/debian/pool/main/libi/libidn2/libidn2-0_2.3.8-2_arm64.deb"
+    },
+    {
+      "Package": "libffi8",
+      "Version": "3.4.8-2",
+      "Architecture": "arm64",
+      "SHA256": "d84a783b818f2386627604e64b793eb4ac5bb9ea1ba321a194a1c9c82fe09a01",
+      "URL": "https://deb.debian.org/debian/pool/main/libf/libffi/libffi8_3.4.8-2_arm64.deb"
+    },
+    {
+      "Package": "libp11-kit0",
+      "Version": "0.25.5-3",
+      "Architecture": "arm64",
+      "SHA256": "78bfc746e68a5217e845f488f69100ed89d10c8886fbd3ffce937acb6a7d88fb",
+      "URL": "https://deb.debian.org/debian/pool/main/p/p11-kit/libp11-kit0_0.25.5-3_arm64.deb"
+    },
+    {
+      "Package": "libtasn1-6",
+      "Version": "4.20.0-2+deb13u1",
+      "Architecture": "arm64",
+      "SHA256": "e421da949cd26245f24c594265d6a01900b5e060e80793f68b977f7bfaa009ef",
+      "URL": "https://deb.debian.org/debian/pool/main/libt/libtasn1-6/libtasn1-6_4.20.0-2+deb13u1_arm64.deb"
+    },
+    {
+      "Package": "libgnutls30t64",
+      "Version": "3.8.9-3+deb13u4",
+      "Architecture": "arm64",
+      "SHA256": "337ef41ab360015d051d6a07f85f8aa6706b35712e3dea23157eba9c902196e2",
+      "URL": "https://deb.debian.org/debian/pool/main/g/gnutls28/libgnutls30t64_3.8.9-3+deb13u4_arm64.deb"
+    },
+    {
+      "Package": "liblttng-ust-common1t64",
+      "Version": "2.13.9-1",
+      "Architecture": "arm64",
+      "SHA256": "7b5d1de65e61d8ab849661c5279063896a599e80afb2ca1d891540994f56d511",
+      "URL": "https://deb.debian.org/debian/pool/main/u/ust/liblttng-ust-common1t64_2.13.9-1_arm64.deb"
+    },
+    {
+      "Package": "libnuma1",
+      "Version": "2.0.19-1",
+      "Architecture": "arm64",
+      "SHA256": "23bd0d4ecdc8cb44438791c10aab969bc9eb11a4b635aae573376c4e23994ff5",
+      "URL": "https://deb.debian.org/debian/pool/main/n/numactl/libnuma1_2.0.19-1_arm64.deb"
+    },
+    {
+      "Package": "liblttng-ust-ctl5t64",
+      "Version": "2.13.9-1",
+      "Architecture": "arm64",
+      "SHA256": "72910f75e1671ead35e3b577a52b9b0c322bc86d0399963feea242750bbeffeb",
+      "URL": "https://deb.debian.org/debian/pool/main/u/ust/liblttng-ust-ctl5t64_2.13.9-1_arm64.deb"
+    },
+    {
+      "Package": "liblttng-ust1t64",
+      "Version": "2.13.9-1",
+      "Architecture": "arm64",
+      "SHA256": "fb848c8917096584f586942a072ac2bb089cf4265ae4e167698a906ffcc4700f",
+      "URL": "https://deb.debian.org/debian/pool/main/u/ust/liblttng-ust1t64_2.13.9-1_arm64.deb"
+    },
+    {
+      "Package": "libpisp-common",
+      "Version": "1.8.0-1",
+      "Architecture": "all",
+      "SHA256": "f10fe3eedd046c6ad1d099fa44a93344a39d746cc8942330a6fbbed755869115",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libp/libpisp/libpisp-common_1.8.0-1_all.deb"
+    },
+    {
+      "Package": "libboost-filesystem1.83.0",
+      "Version": "1.83.0-4.2",
+      "Architecture": "arm64",
+      "SHA256": "10b958550550b2e7c71f0ae216566bb9eb959da645a6a0db25fb499549c49f15",
+      "URL": "https://deb.debian.org/debian/pool/main/b/boost1.83/libboost-filesystem1.83.0_1.83.0-4.2_arm64.deb"
+    },
+    {
+      "Package": "libboost-thread1.83.0",
+      "Version": "1.83.0-4.2",
+      "Architecture": "arm64",
+      "SHA256": "973c3211095ad0547406bb94cd2e30948095e23e9d96b496023a4126dd1955c3",
+      "URL": "https://deb.debian.org/debian/pool/main/b/boost1.83/libboost-thread1.83.0_1.83.0-4.2_arm64.deb"
+    },
+    {
+      "Package": "libboost-log1.83.0",
+      "Version": "1.83.0-4.2",
+      "Architecture": "arm64",
+      "SHA256": "7dd3889295a032c0a89a52dc0fc969ccb17491fda657d242b287096419b5cd72",
+      "URL": "https://deb.debian.org/debian/pool/main/b/boost1.83/libboost-log1.83.0_1.83.0-4.2_arm64.deb"
+    },
+    {
+      "Package": "libpisp1",
+      "Version": "1.8.0-1",
+      "Architecture": "arm64",
+      "SHA256": "eead0b062e596c3308ee1bef795465fcee257181169725179ca6737fec56579e",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libp/libpisp/libpisp1_1.8.0-1_arm64.deb"
+    },
+    {
+      "Package": "libcap2",
+      "Version": "1:2.75-10+deb13u1+b3",
+      "Architecture": "arm64",
+      "SHA256": "863aa5b9cdf6f80010b48982d4639126b09a89eeef2c0c5c7be226297c811581",
+      "URL": "https://deb.debian.org/debian/pool/main/libc/libcap2/libcap2_2.75-10+deb13u1+b3_arm64.deb"
+    },
+    {
+      "Package": "libudev1",
+      "Version": "257.13-1~deb13u1",
+      "Architecture": "arm64",
+      "SHA256": "459b1c9c17cc3c586e90d13d2a991715d498c6eed6c046cabf321021167bc380",
+      "URL": "https://deb.debian.org/debian/pool/main/s/systemd/libudev1_257.13-1~deb13u1_arm64.deb"
+    },
+    {
+      "Package": "libyaml-0-2",
+      "Version": "0.2.5-2",
+      "Architecture": "arm64",
+      "SHA256": "c81500b4c93e29ac28cdded7ec5bf9950c75f8c76c386669ccb6fb854c4daf72",
+      "URL": "https://deb.debian.org/debian/pool/main/liby/libyaml/libyaml-0-2_0.2.5-2_arm64.deb"
+    },
+    {
+      "Package": "libabsl20240722",
+      "Version": "20240722.0-4",
+      "Architecture": "arm64",
+      "SHA256": "eb6648c73cd69c577a2bc18c8d66d44de897c0207a734ffdb55f91945404d0ac",
+      "URL": "https://deb.debian.org/debian/pool/main/a/abseil/libabsl20240722_20240722.0-4_arm64.deb"
+    },
+    {
+      "Package": "libcpuinfo0",
+      "Version": "0.0~git20250327.39ea79a-1",
+      "Architecture": "arm64",
+      "SHA256": "4a74413171dff27c486011b5d7e7aa971fb7cb331895ab9727169a8b9efa2604",
+      "URL": "https://deb.debian.org/debian/pool/main/c/cpuinfo/libcpuinfo0_0.0~git20250327.39ea79a-1_arm64.deb"
+    },
+    {
+      "Package": "libfarmhash0",
+      "Version": "0~git20190513.0d859a8-3+b1",
+      "Architecture": "arm64",
+      "SHA256": "0316c69b9f02bba419857694a04b039732142a2fa4c4bc20c81c671c8a9c0719",
+      "URL": "https://deb.debian.org/debian/pool/main/f/farmhash/libfarmhash0_0~git20190513.0d859a8-3+b1_arm64.deb"
+    },
+    {
+      "Package": "libtensorflow-lite2.20.0",
+      "Version": "2.20.0-1+rpt1",
+      "Architecture": "arm64",
+      "SHA256": "147f938692eb5856ac95f94e6b65c85eb30f9d5e6ee3f39e358b47869d24202b",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/t/tensorflow/libtensorflow-lite2.20.0_2.20.0-1+rpt1_arm64.deb"
+    },
+    {
+      "Package": "libcamera-ipa",
+      "Version": "0.8.0+rpt20261104-1",
+      "Architecture": "arm64",
+      "SHA256": "b0bb6d212b0d78ed81aa07dd2c8bae137380a4cdba9c772dd6c38c8c17f690e2",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libc/libcamera/libcamera-ipa_0.8.0+rpt20261104-1_arm64.deb"
+    },
+    {
+      "Package": "libcamera0.8",
+      "Version": "0.8.0+rpt20261104-1",
+      "Architecture": "arm64",
+      "SHA256": "102493a126767d59ae6c475da1fa78b5a1445a9cd0bd731de6b563b0620d2183",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libc/libcamera/libcamera0.8_0.8.0+rpt20261104-1_arm64.deb"
+    },
+    {
+      "Package": "libcamera-dev",
+      "Version": "0.8.0+rpt20261104-1",
+      "Architecture": "arm64",
+      "SHA256": "ecd13e4a5c8b87a6db5b51c4450de67435dfbd214880615072dd7bc274a790ce",
+      "URL": "https://archive.raspberrypi.com/debian/pool/main/libc/libcamera/libcamera-dev_0.8.0+rpt20261104-1_arm64.deb"
+    }
+  ],
+  "libcamera_package": "libcamera0.8"
+}
