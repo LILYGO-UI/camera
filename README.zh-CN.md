@@ -333,29 +333,12 @@ K230 的 V4L2/VVCAM 后端和 [FFmpeg](https://ffmpeg.org/)。项目软件包元
 
 ## K230 Debian 打包
 
-K230 使用 `riscv64` 架构和 `k230-debian` preset。默认 SDK 为固定版本的
-`third_party/cm0-appkit`；请初始化子模块，并确保 AppKit 版本包含
-`cmake/k230-debian-toolchain.cmake`。
-
-使用所选 SDK 的 `tools/prepare-riscv64-sysroot.py` 准备 Debian riscv64
-sysroot。Linux 需要 `gcc-riscv64-linux-gnu` 和 `g++-riscv64-linux-gnu`；
-macOS 需要 Homebrew LLVM、LLD 和 dpkg（`brew install llvm lld dpkg`）。此 Debian
-目标不能使用 Buildroot sysroot。
-
-在当前多仓库工作区中，只需准备一次共享 sysroot，并在首次配置时选择同级 SDK：
+Linux 主机安装 `gcc-riscv64-linux-gnu` 和 `g++-riscv64-linux-gnu`，macOS 主机用 `brew install llvm lld dpkg` 安装交叉编译和打包工具。在应用仓库根目录运行打包命令。
 
 ```sh
-python3 ../cm0-appkit/tools/prepare-riscv64-sysroot.py
-cmake --preset k230-debian -DLilyGoUI_DIR="$PWD/../cm0-appkit"
 lpm pack --arch riscv64
 ```
 
-SDK 默认使用 `../cm0-appkit/.cache/k230-debian/sysroot`。如需其他 Debian
-sysroot，可设置 `LILYGO_UI_DEBIAN_SYSROOT` 环境变量，或在配置时传入
-`-DLILYGO_UI_DEBIAN_SYSROOT=/path/to/sysroot`。首次配置前也可通过
-`LILYGO_UI_APPKIT_DIR` 选择 SDK；修改已缓存的选择请使用
-`-DLilyGoUI_DIR=...`。后续 `lpm pack --arch riscv64` 会沿用该 SDK，
-并将 riscv64 Debian 安装包写入 `dist/`。ARM64 仍可通过
-`lpm pack --arch arm64` 构建。
+`k230-debian` CMake 预设首次配置时从 `LILYGO-UI/canaan-gen` Release 下载固定版本的 Debian BSP，校验 SHA-256，并将压缩包和 `sysroot/` 保存在当前项目的 `.cache/k230-bsp/20261116T104343Z/`。之后可以离线打包，重新生成 `build/` 也会复用缓存。生成的 `.deb` 在 `dist/` 目录。
 
-执行一次 `lpm set-target k230` 保存 K230 为默认目标，后续直接运行 `lpm pack`。
+执行一次 `lpm set-target k230` 后，后续直接运行 `lpm pack`。如需自定义 Debian sysroot，在首次配置前设置 `LILYGO_UI_DEBIAN_SYSROOT`，或向 CMake 传入 `-DLILYGO_UI_DEBIAN_SYSROOT=/path/to/sysroot`。AppKit 默认使用 `third_party/cm0-appkit`，可用 `-DLilyGoUI_DIR=/path/to/appkit` 指定其他版本。

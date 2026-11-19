@@ -394,32 +394,12 @@ package metadata declares the MIT license.
 
 ## K230 Debian packages
 
-K230 uses the `riscv64` architecture and the `k230-debian` preset. The default
-SDK is the pinned `third_party/cm0-appkit`; initialize its submodules and use
-an AppKit revision that provides `cmake/k230-debian-toolchain.cmake`.
-
-Prepare a Debian riscv64 sysroot with the selected SDK's
-`tools/prepare-riscv64-sysroot.py`. Linux builds require
-`gcc-riscv64-linux-gnu` and `g++-riscv64-linux-gnu`; macOS builds require
-Homebrew LLVM, LLD and dpkg (`brew install llvm lld dpkg`). Buildroot sysroots are not
-compatible with this Debian target.
-
-For this multi-repository workspace, prepare the shared sysroot once and
-select the sibling SDK on the first configure:
+Install `gcc-riscv64-linux-gnu` and `g++-riscv64-linux-gnu` on Linux, or LLVM, LLD and dpkg on macOS (`brew install llvm lld dpkg`). From this application's repository, run the packaging command.
 
 ```sh
-python3 ../cm0-appkit/tools/prepare-riscv64-sysroot.py
-cmake --preset k230-debian -DLilyGoUI_DIR="$PWD/../cm0-appkit"
 lpm pack --arch riscv64
 ```
 
-The SDK uses `../cm0-appkit/.cache/k230-debian/sysroot` by default. To use a
-different Debian sysroot, set `LILYGO_UI_DEBIAN_SYSROOT` or pass
-`-DLILYGO_UI_DEBIAN_SYSROOT=/path/to/sysroot` while configuring. Set
-`LILYGO_UI_APPKIT_DIR` before the first configure to select another SDK, or
-use `-DLilyGoUI_DIR=...` to update the cached selection. Subsequent
-`lpm pack --arch riscv64` commands reuse that SDK and write a riscv64 Debian
-package to `dist/`. ARM64 remains available with `lpm pack --arch arm64`.
+The `k230-debian` CMake preset downloads the pinned Debian BSP from the `LILYGO-UI/canaan-gen` release and verifies its SHA-256. It keeps the archive and `sysroot/` in this project's `.cache/k230-bsp/20261116T104343Z/`. The next build reuses the cache offline, even with a new `build/` directory. Packages appear in `dist/`.
 
-Run `lpm set-target k230` once to save K230 as the default target, then use
-`lpm pack` directly.
+Run `lpm set-target k230` once to use `lpm pack` for subsequent builds. To use your own Debian sysroot, set `LILYGO_UI_DEBIAN_SYSROOT` before the first configure, or pass `-DLILYGO_UI_DEBIAN_SYSROOT=/path/to/sysroot` to CMake. The pinned `third_party/cm0-appkit` supplies the application SDK. `-DLilyGoUI_DIR=/path/to/appkit` selects another copy.
